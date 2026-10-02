@@ -21,6 +21,10 @@ class RtmpConnection : RtmpStreamSink {
     private var isConnected = false
 
     var onStatusListener: ((statusMessage: String, isError: Boolean) -> Unit)? = null
+    var onPublishVerified: (() -> Unit)? = null
+    var onPublishFailed: ((String) -> Unit)? = null
+    @Volatile private var isPublishVerified = false
+    fun isPublishVerified(): Boolean = isPublishVerified
 
     fun connect(rtmpUrl: String, streamKey: String, width: Int, height: Int, fps: Int, videoBitrateKbps: Int): Boolean {
         try {
@@ -146,10 +150,14 @@ class RtmpConnection : RtmpStreamSink {
         val amf = AmfWriter()
         amf.writeString("connect")
         amf.writeNumber(1.0) // Transaction ID
+        val cleanTcUrl = when {
+            tcUrl.endsWith("/") -> tcUrl.dropLast(1)
+            else -> tcUrl
+        }
         val connectProps = mapOf(
             "app" to app,
             "flashVer" to "FMLE/3.0 (compatible; FMSc/1.0)",
-            "tcUrl" to tcUrl.substringBeforeLast("/"),
+            "tcUrl" to cleanTcUrl,
             "fpad" to false,
             "capabilities" to 15.0,
             "audioCodecs" to 3191.0,
@@ -358,9 +366,12 @@ class RtmpConnection : RtmpStreamSink {
                         val str = String(buffer, 0, minOf(read, 1024), Charsets.ISO_8859_1)
                         if (str.contains("NetStream.Publish.Start")) {
                             Log.d(TAG, "RTMP server confirmed: NetStream.Publish.Start")
+                            isPublishVerified = true
+                            onPublishVerified?.invoke()
                             onStatusListener?.invoke("Live transmission accepted by server", false)
-                        } else if (str.contains("NetStream.Publish.BadName") || str.contains("Connect.Rejected")) {
+                        } else if (str.contains("NetStream.Publish.BadName") || str.contains("Connect.Rejected") || str.contains("Publish.Denied")) {
                             Log.e(TAG, "RTMP server rejected stream: $str")
+                            onPublishFailed?.invoke("Facebook rejected stream key. Please check key in Live Producer.")
                             onStatusListener?.invoke("Server rejected stream key. Please check key in Live Producer.", true)
                         }
                     }

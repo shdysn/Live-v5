@@ -43,6 +43,7 @@ import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -257,26 +258,56 @@ fun BroadcastControlScreen(
                 }
 
                 // Live Status Badge & Duration
+                val currentStatus = uiState.telemetry.status
+                val isConnecting = currentStatus == StreamStatus.CONNECTING
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
                         .clip(RoundedCornerShape(20.dp))
                         .background(StudioCard.copy(alpha = 0.85f))
-                        .border(1.dp, StudioBorder, RoundedCornerShape(20.dp))
+                        .border(
+                            1.dp,
+                            if (isConnecting) StudioAmber.copy(alpha = 0.6f) else StudioBorder,
+                            RoundedCornerShape(20.dp)
+                        )
                         .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(10.dp)
-                            .clip(CircleShape)
-                            .background(if (isLive) LiveRed else TextMuted)
-                    )
+                    if (isConnecting) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(10.dp),
+                            color = StudioAmber,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .size(10.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    when {
+                                        isLive -> LiveRed
+                                        currentStatus == StreamStatus.ERROR -> LiveRed
+                                        else -> TextMuted
+                                    }
+                                )
+                        )
+                    }
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = if (isLive) "LIVE" else uiState.telemetry.status.name,
+                        text = when {
+                            isLive -> "LIVE"
+                            isConnecting -> "VERIFYING (${uiState.telemetry.verificationCountdownSeconds}s)"
+                            currentStatus == StreamStatus.ERROR -> "ERROR"
+                            else -> currentStatus.name
+                        },
                         style = MaterialTheme.typography.labelMedium.copy(
                             fontWeight = FontWeight.Bold,
-                            color = if (isLive) LiveRed else TextSecondary
+                            color = when {
+                                isLive -> LiveRed
+                                isConnecting -> StudioAmber
+                                currentStatus == StreamStatus.ERROR -> LiveRed
+                                else -> TextSecondary
+                            }
                         )
                     )
                     if (isLive) {
@@ -550,17 +581,22 @@ fun BroadcastControlScreen(
                     contentDescription = "Switch Camera"
                 )
 
-                // Main Live Action Button (Go Live / Stop)
+                // Main Live Action Button (Go Live / Verifying / Stop)
+                val isConnectingStream = uiState.telemetry.status == StreamStatus.CONNECTING
                 Button(
                     onClick = {
-                        if (isLive) {
+                        if (isLive || isConnectingStream) {
                             viewModel.promptEndConfirmation(true)
                         } else {
                             viewModel.startLiveStream()
                         }
                     },
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isLive) LiveRed else StudioGreen
+                        containerColor = when {
+                            isLive -> LiveRed
+                            isConnectingStream -> StudioAmber
+                            else -> StudioGreen
+                        }
                     ),
                     shape = RoundedCornerShape(24.dp),
                     modifier = Modifier
@@ -568,19 +604,36 @@ fun BroadcastControlScreen(
                         .padding(horizontal = 8.dp)
                         .testTag("stream_toggle_button")
                 ) {
-                    Icon(
-                        imageVector = if (isLive) Icons.Default.Stop else Icons.Default.Videocam,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = if (isLive) "End Stream" else "Start Live",
-                        style = MaterialTheme.typography.titleSmall.copy(
-                            fontWeight = FontWeight.Bold,
-                            color = StudioDark
+                    if (isConnectingStream) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            color = StudioDark,
+                            strokeWidth = 2.dp
                         )
-                    )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Verifying (${uiState.telemetry.verificationCountdownSeconds}s)...",
+                            style = MaterialTheme.typography.titleSmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                color = StudioDark
+                            )
+                        )
+                    } else {
+                        Icon(
+                            imageVector = if (isLive) Icons.Default.Stop else Icons.Default.Videocam,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                            tint = StudioDark
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (isLive) "End Stream" else "Start Live",
+                            style = MaterialTheme.typography.titleSmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                color = StudioDark
+                            )
+                        )
+                    }
                 }
 
                 // Flashlight / Torch

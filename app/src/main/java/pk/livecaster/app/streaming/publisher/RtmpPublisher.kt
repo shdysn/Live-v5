@@ -75,6 +75,7 @@ class RtmpPublisher(
         _telemetry.value = _telemetry.value.copy(
             status = StreamStatus.CONNECTING,
             durationSeconds = 0,
+            verificationCountdownSeconds = 15,
             droppedFrames = 0,
             currentViewers = 0,
             errorMessage = null
@@ -98,11 +99,14 @@ class RtmpPublisher(
                                 )
                             } else {
                                 android.util.Log.d("RtmpPublisher", "[${endpoint.name}] $msg")
-                                _telemetry.value = _telemetry.value.copy(
-                                    errorMessage = null,
-                                    health = StreamHealth.EXCELLENT
-                                )
                             }
+                        }
+                        conn.onPublishFailed = { errMsg ->
+                            _telemetry.value = _telemetry.value.copy(
+                                status = StreamStatus.ERROR,
+                                errorMessage = errMsg,
+                                health = StreamHealth.CRITICAL
+                            )
                         }
                         conn.connect(
                             rtmpUrl = endpoint.rtmpUrl,
@@ -113,7 +117,7 @@ class RtmpPublisher(
                             videoBitrateKbps = videoConfig.bitrateKbps
                         )
                         activeConnections.add(conn)
-                        android.util.Log.d("RtmpPublisher", "Successfully connected to ${endpoint.name}")
+                        android.util.Log.d("RtmpPublisher", "Successfully connected socket to ${endpoint.name}")
                     } catch (e: Exception) {
                         android.util.Log.e("RtmpPublisher", "Failed to connect to ${endpoint.name}", e)
                         errors.add("${endpoint.name}: ${e.message ?: "Failed"}")
@@ -146,8 +150,62 @@ class RtmpPublisher(
                 audioEncoder = aEnc
                 aEnc.start()
 
+                // 3. Verification countdown phase (15 seconds)
+                // App stays in CONNECTING until Facebook/YouTube actually confirms NetStream.Publish.Start
+                var verified = false
+                var remainingCountdown = 15
+                while (isActive && remainingCountdown > 0 && !verified) {
+                    delay(1000)
+                    remainingCountdown--
+
+                    // Check if server rejected or disconnected
+                    if (_telemetry.value.status == StreamStatus.ERROR) {
+                        break
+                    }
+
+                    val hasAlive = activeConnections.any { it.isConnected() }
+                    if (!hasAlive) {
+                        _telemetry.value = _telemetry.value.copy(
+                            status = StreamStatus.ERROR,
+                            errorMessage = "Server closed connection during verification. Check your stream key in Facebook Live Producer.",
+                            health = StreamHealth.CRITICAL
+                        )
+                        break
+                    }
+
+                    // Check if server confirmed live transmission
+                    if (activeConnections.any { it.isPublishVerified() }) {
+                        verified = true
+                        break
+                    }
+
+                    _telemetry.value = _telemetry.value.copy(
+                        status = StreamStatus.CONNECTING,
+                        verificationCountdownSeconds = remainingCountdown,
+                        currentFps = targetFps,
+                        currentBitrateKbps = targetBitrateKbps
+                    )
+                }
+
+                if (!verified && _telemetry.value.status != StreamStatus.ERROR) {
+                    _telemetry.value = _telemetry.value.copy(
+                        status = StreamStatus.ERROR,
+                        errorMessage = "Live stream could not be verified on Facebook (15s timeout). Ensure your Stream Key in Facebook Live Producer is active and not expired.",
+                        health = StreamHealth.POOR
+                    )
+                    stopPublishing()
+                    return@launch
+                }
+
+                if (_telemetry.value.status == StreamStatus.ERROR) {
+                    stopPublishing()
+                    return@launch
+                }
+
+                // 4. Server has verified live stream! Switch to LIVE!
                 _telemetry.value = _telemetry.value.copy(
                     status = StreamStatus.LIVE,
+                    verificationCountdownSeconds = 0,
                     currentFps = targetFps,
                     currentBitrateKbps = targetBitrateKbps,
                     health = StreamHealth.EXCELLENT,
@@ -189,7 +247,7 @@ class RtmpPublisher(
     }
 
     fun encodeVideoFrame(yuvBytes: ByteArray) {
-        if (_telemetry.value.status == StreamStatus.LIVE) {
+        if (_telemetry.value.status == StreamStatus.LIVE || _telemetry.value.status == StreamStatus.CONNECTING) {
             videoEncoder?.encodeYuv(yuvBytes)
         }
     }

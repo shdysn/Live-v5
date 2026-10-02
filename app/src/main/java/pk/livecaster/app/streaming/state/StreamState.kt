@@ -19,6 +19,7 @@ data class StreamTelemetry(
     val currentViewers: Long = 0,
     val health: StreamHealth = StreamHealth.EXCELLENT,
     val errorMessage: String? = null,
+    val verificationCountdownSeconds: Int = 0,
     val isMicMuted: Boolean = false,
     val isTorchOn: Boolean = false,
     val isFrontCamera: Boolean = false
