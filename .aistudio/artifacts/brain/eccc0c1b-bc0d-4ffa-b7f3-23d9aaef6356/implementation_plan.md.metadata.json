@@ -1,6 +1,6 @@
 {
-  "summary":  "Revised implementation plan addressing the user's core requirement: the app must NEVER show LIVE until Facebook or YouTube has officially confirmed the stream. Introduces a 15-second verification countdown in CONNECTING state, verifies NetStream.Publish.Start from the server before entering LIVE state, fixes the tcUrl path and AMF0 ECMA array formatting, and handles verification failure gracefully.",
-  "updatedAt":  "2026-10-02T09:03:32.180797694Z",
+  "summary":  "Comprehensive fix based on the user's Facebook Live Producer screenshot. Resolves the missing AVC sequence header (SPS/PPS) issue where Android MediaCodec outputs SPS and PPS in separate buffers, causing Facebook's decoder to never initialize and display 'Connect streaming software to go live'. Ensures SPS and PPS are reliably extracted, cached, and sent immediately with fallback Baseline 720p headers and periodic IDR retransmission.",
+  "updatedAt":  "2026-10-02T09:29:05.294170853Z",
   "requestFeedback":  true,
   "userFacing":  true
 }

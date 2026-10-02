@@ -83,6 +83,9 @@ class RtmpConnection : RtmpStreamSink {
             // 6. MetaData
             sendMetaData(width, height, fps, videoBitrateKbps)
 
+            // 7. Initial AAC audio header so ingest server gets audio config immediately
+            sendAacSequenceHeader(44100, 2)
+
             isConnected = true
             startReaderThread()
             Log.d(TAG, "RTMP connection successfully established and published!")
@@ -226,6 +229,8 @@ class RtmpConnection : RtmpStreamSink {
     }
 
     override fun sendAvcSequenceHeader(sps: ByteArray, pps: ByteArray) {
+        val cleanSps = removeStartCode(sps)
+        val cleanPps = removeStartCode(pps)
         val out = ByteArrayOutputStream()
         // FLV Video Tag header
         out.write(0x17) // 1: Keyframe, 7: AVC
@@ -236,29 +241,32 @@ class RtmpConnection : RtmpStreamSink {
 
         // AVCDecoderConfigurationRecord
         out.write(0x01) // configurationVersion
-        out.write(if (sps.size > 1) sps[1].toInt() and 0xFF else 0x42) // AVCProfileIndication
-        out.write(if (sps.size > 2) sps[2].toInt() and 0xFF else 0x00) // profile_compatibility
-        out.write(if (sps.size > 3) sps[3].toInt() and 0xFF else 0x1F) // AVCLevelIndication
-        out.write(0xFF) // lengthSizeMinusOne (4 bytes length)
+        out.write(if (cleanSps.size > 1) cleanSps[1].toInt() and 0xFF else 0x42) // AVCProfileIndication
+        out.write(if (cleanSps.size > 2) cleanSps[2].toInt() and 0xFF else 0x00) // profile_compatibility
+        out.write(if (cleanSps.size > 3) cleanSps[3].toInt() and 0xFF else 0x1F) // AVCLevelIndication
+        out.write(0xFF) // lengthSizeMinusOne (4 bytes length: 11111111b -> lengthSizeMinusOne = 3)
 
         // SPS
         out.write(0xE1) // numOfSequenceParameterSets = 1
-        out.write((sps.size shr 8) and 0xFF)
-        out.write(sps.size and 0xFF)
-        out.write(sps)
+        out.write((cleanSps.size shr 8) and 0xFF)
+        out.write(cleanSps.size and 0xFF)
+        out.write(cleanSps)
 
         // PPS
         out.write(0x01) // numOfPictureParameterSets = 1
-        out.write((pps.size shr 8) and 0xFF)
-        out.write(pps.size and 0xFF)
-        out.write(pps)
+        out.write((cleanPps.size shr 8) and 0xFF)
+        out.write(cleanPps.size and 0xFF)
+        out.write(cleanPps)
 
         val payload = out.toByteArray()
         sendRtmpPacket(csid = 6, messageType = 9, streamId = 1, timestamp = 0, payload = payload)
     }
 
     override fun sendVideoNalu(nalu: ByteArray, isKeyframe: Boolean, timestampMs: Long) {
-        val out = ByteArrayOutputStream(nalu.size + 9)
+        val cleanNalu = removeStartCode(nalu)
+        if (cleanNalu.isEmpty()) return
+
+        val out = ByteArrayOutputStream(cleanNalu.size + 9)
         // FLV Video Tag Header
         out.write(if (isKeyframe) 0x17 else 0x27)
         out.write(0x01) // AVC NALU
@@ -267,14 +275,24 @@ class RtmpConnection : RtmpStreamSink {
         out.write(0x00)
 
         // 4 bytes NAL length
-        val len = nalu.size
+        val len = cleanNalu.size
         out.write((len shr 24) and 0xFF)
         out.write((len shr 16) and 0xFF)
         out.write((len shr 8) and 0xFF)
         out.write(len and 0xFF)
-        out.write(nalu)
+        out.write(cleanNalu)
 
         sendRtmpPacket(csid = 6, messageType = 9, streamId = 1, timestamp = timestampMs, payload = out.toByteArray())
+    }
+
+    private fun removeStartCode(data: ByteArray): ByteArray {
+        return if (data.size >= 4 && data[0] == 0.toByte() && data[1] == 0.toByte() && data[2] == 0.toByte() && data[3] == 1.toByte()) {
+            data.copyOfRange(4, data.size)
+        } else if (data.size >= 3 && data[0] == 0.toByte() && data[1] == 0.toByte() && data[2] == 1.toByte()) {
+            data.copyOfRange(3, data.size)
+        } else {
+            data
+        }
     }
 
     override fun sendAacSequenceHeader(sampleRate: Int, channelCount: Int) {

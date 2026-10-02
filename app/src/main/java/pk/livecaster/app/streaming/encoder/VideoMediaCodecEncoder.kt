@@ -18,6 +18,19 @@ class VideoMediaCodecEncoder(
     private var isEncoding = false
     private var startTimeMs: Long = 0
     private var sequenceHeaderSent = false
+    @Volatile private var cachedSps: ByteArray? = null
+    @Volatile private var cachedPps: ByteArray? = null
+
+    // Standard 1280x720 H.264 Baseline Profile SPS & PPS fallback
+    private val defaultSps = byteArrayOf(
+        0x67.toByte(), 0x42.toByte(), 0xC0.toByte(), 0x1F.toByte(), 0x8C.toByte(),
+        0x8D.toByte(), 0x40.toByte(), 0x50.toByte(), 0x1E.toByte(), 0xD0.toByte(),
+        0x10.toByte(), 0x00.toByte(), 0x00.toByte(), 0x03.toByte(), 0x00.toByte(),
+        0x10.toByte(), 0x00.toByte(), 0x00.toByte(), 0x03.toByte(), 0x03.toByte(),
+        0x20.toByte(), 0xF1.toByte(), 0x83.toByte(), 0x19.toByte(), 0x60.toByte()
+    )
+    private val defaultPps = byteArrayOf(0x68.toByte(), 0xCE.toByte(), 0x38.toByte(), 0x80.toByte())
+
     private var drainThread: Thread? = null
     private var keepAliveThread: Thread? = null
     private var lastFrameBytes: ByteArray? = null
@@ -46,8 +59,13 @@ class VideoMediaCodecEncoder(
 
             isEncoding = true
             sequenceHeaderSent = false
+            cachedSps = null
+            cachedPps = null
             startTimeMs = System.currentTimeMillis()
             lastFrameTimeMs = startTimeMs
+
+            // Send initial sequence header immediately so Facebook ingest connects without delay
+            rtmpSink.sendAvcSequenceHeader(defaultSps, defaultPps)
 
             startDrainThread()
             startKeepAliveThread()
@@ -176,12 +194,26 @@ class VideoMediaCodecEncoder(
     }
 
     private fun handleCodecConfig(configData: ByteArray) {
-        val spsPps = parseSpsPps(configData)
-        if (spsPps != null) {
-            val (sps, pps) = spsPps
-            rtmpSink.sendAvcSequenceHeader(sps, pps)
+        val nalus = splitAnnexBNalus(configData)
+        for (nalu in nalus) {
+            if (nalu.isNotEmpty()) {
+                val clean = removeStartCode(nalu)
+                if (clean.isNotEmpty()) {
+                    val type = clean[0].toInt() and 0x1F
+                    if (type == 7) {
+                        cachedSps = clean
+                        Log.d(TAG, "Cached SPS from configData (${clean.size} bytes)")
+                    } else if (type == 8) {
+                        cachedPps = clean
+                        Log.d(TAG, "Cached PPS from configData (${clean.size} bytes)")
+                    }
+                }
+            }
+        }
+        if (cachedSps != null && cachedPps != null) {
+            rtmpSink.sendAvcSequenceHeader(cachedSps!!, cachedPps!!)
             sequenceHeaderSent = true
-            Log.d(TAG, "AVC Sequence Header sent (SPS: ${sps.size}b, PPS: ${pps.size}b)")
+            Log.d(TAG, "AVC Sequence Header sent (SPS: ${cachedSps!!.size}b, PPS: ${cachedPps!!.size}b)")
         }
     }
 
@@ -191,15 +223,18 @@ class VideoMediaCodecEncoder(
             val format = codec.outputFormat
             val csd0 = format.getByteBuffer("csd-0")
             val csd1 = format.getByteBuffer("csd-1")
-            if (csd0 != null && csd1 != null) {
+            if (csd0 != null) {
                 val sps = ByteArray(csd0.remaining())
                 csd0.get(sps)
+                cachedSps = removeStartCode(sps)
+            }
+            if (csd1 != null) {
                 val pps = ByteArray(csd1.remaining())
                 csd1.get(pps)
-
-                val cleanSps = removeStartCode(sps)
-                val cleanPps = removeStartCode(pps)
-                rtmpSink.sendAvcSequenceHeader(cleanSps, cleanPps)
+                cachedPps = removeStartCode(pps)
+            }
+            if (cachedSps != null && cachedPps != null) {
+                rtmpSink.sendAvcSequenceHeader(cachedSps!!, cachedPps!!)
                 sequenceHeaderSent = true
                 Log.d(TAG, "Extracted SPS/PPS from outputFormat and sent sequence header")
             }
@@ -210,12 +245,26 @@ class VideoMediaCodecEncoder(
         val nalus = splitAnnexBNalus(data)
         for (nalu in nalus) {
             if (nalu.isNotEmpty()) {
-                val nalType = nalu[0].toInt() and 0x1F
-                if (nalType == 7 || nalType == 8) {
-                    // SPS or PPS, already handled
+                val clean = removeStartCode(nalu)
+                if (clean.isEmpty()) continue
+                val nalType = clean[0].toInt() and 0x1F
+                if (nalType == 7) {
+                    cachedSps = clean
                     continue
                 }
-                rtmpSink.sendVideoNalu(nalu, isKeyframe, timestampMs)
+                if (nalType == 8) {
+                    cachedPps = clean
+                    continue
+                }
+                val actualKeyframe = isKeyframe || (nalType == 5)
+                if (actualKeyframe) {
+                    // Send SPS & PPS sequence header right before keyframe for instant sync
+                    val sps = cachedSps ?: defaultSps
+                    val pps = cachedPps ?: defaultPps
+                    rtmpSink.sendAvcSequenceHeader(sps, pps)
+                    sequenceHeaderSent = true
+                }
+                rtmpSink.sendVideoNalu(clean, actualKeyframe, timestampMs)
             }
         }
     }
