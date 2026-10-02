@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.FlashlightOff
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.Visibility
@@ -73,6 +74,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.example.ui.theme.FacebookBrandColor
 import com.example.ui.theme.LiveRed
 import com.example.ui.theme.StudioAmber
 import com.example.ui.theme.StudioBorder
@@ -141,6 +143,7 @@ fun BroadcastControlScreen(
     }
 
     val isLive = uiState.telemetry.status == StreamStatus.LIVE
+    var showGoLiveSheet by remember { mutableStateOf(false) }
 
     Box(
         modifier = modifier
@@ -408,23 +411,62 @@ fun BroadcastControlScreen(
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
-                            .background(StudioCard.copy(alpha = 0.85f))
-                            .border(1.dp, StudioGreen.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                            .background(FacebookBrandColor)
+                            .clickable { showGoLiveSheet = true }
+                            .padding(horizontal = 10.dp, vertical = 5.dp)
+                            .testTag("open_fb_golive_sheet_button")
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                imageVector = Icons.Default.FlashOn,
+                                imageVector = Icons.Default.Public,
                                 contentDescription = null,
-                                tint = StudioAmber,
+                                tint = Color.White,
                                 modifier = Modifier.size(14.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = "1-Tap Direct Live",
+                                text = "FB 'Go Live' Sheet ↗",
                                 style = MaterialTheme.typography.labelSmall.copy(
-                                    color = TextPrimary,
-                                    fontWeight = FontWeight.SemiBold
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            )
+                        }
+                    }
+                }
+
+                // Banner prompt when live to easily tap Go Live on Facebook
+                if (isLive) {
+                    Card(
+                        shape = RoundedCornerShape(10.dp),
+                        colors = CardDefaults.cardColors(containerColor = StudioCard.copy(alpha = 0.9f)),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, FacebookBrandColor.copy(alpha = 0.6f)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp)
+                            .clickable { showGoLiveSheet = true }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(LiveRed)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Live video transmitting! Tap to open Facebook and click 'Go Live'.",
+                                style = MaterialTheme.typography.bodySmall.copy(color = TextPrimary),
+                                modifier = Modifier.weight(1f)
+                            )
+                            Text(
+                                text = "Tap Here ↗",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    color = StudioCyan,
+                                    fontWeight = FontWeight.Bold
                                 )
                             )
                         }
@@ -649,6 +691,12 @@ fun BroadcastControlScreen(
                 )
             }
         }
+
+        // In-App Persistent Floating Sheet for Facebook Go Live
+        FacebookGoLiveSheet(
+            isVisible = showGoLiveSheet,
+            onDismiss = { showGoLiveSheet = false }
+        )
     }
 
     // End Stream Confirmation Dialog

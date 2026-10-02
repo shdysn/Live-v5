@@ -1,6 +1,6 @@
 {
-  "summary":  "Implementation plan for 1-Tap Pure Mobile Live streaming to Facebook profile. Includes step-by-step 1-time Auto-Start configuration in Facebook with Persistent Stream Key so the user never needs to touch a browser again, plus in-app 1-Tap live broadcast flow and auto-publish detection.",
-  "updatedAt":  "2026-10-02T09:48:44.013762615Z",
+  "summary":  "Implementation plan for an In-App Floating Sheet with Persistent Facebook Session to tap Go Live instantly right inside LiveCaster. Users never leave the app to external Chrome; session cookies are preserved, and live video goes directly to profile timeline.",
+  "updatedAt":  "2026-10-02T10:45:22.812183784Z",
   "requestFeedback":  true,
   "userFacing":  true
 }
