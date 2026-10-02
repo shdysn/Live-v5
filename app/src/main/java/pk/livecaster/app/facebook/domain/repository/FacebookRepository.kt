@@ -13,6 +13,13 @@ interface FacebookRepository {
         title: String,
         description: String
     ): Resource<FacebookLiveVideo>
+    suspend fun createProfileLiveStream(
+        title: String,
+        description: String
+    ): Resource<FacebookLiveVideo>
+    suspend fun endLiveStream(liveVideoId: String): Resource<Unit>
     suspend fun linkPage(pageName: String, pageId: String, pageToken: String): Resource<FacebookPage>
     suspend fun unlinkPage(pageId: String): Resource<Unit>
+    fun getSavedToken(): String?
+    fun saveToken(token: String)
 }

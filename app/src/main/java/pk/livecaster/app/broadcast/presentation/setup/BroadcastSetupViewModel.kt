@@ -13,8 +13,14 @@ import pk.livecaster.app.broadcast.domain.model.PlatformType
 import pk.livecaster.app.broadcast.domain.usecase.CreateBroadcastUseCase
 import pk.livecaster.app.core.common.Resource
 import pk.livecaster.app.core.constants.StreamConstants
+import pk.livecaster.app.facebook.domain.model.FacebookPage
 import pk.livecaster.app.facebook.domain.repository.FacebookRepository
 import pk.livecaster.app.youtube.domain.repository.YouTubeRepository
+
+enum class FacebookDestination {
+    PROFILE,
+    PAGE
+}
 
 sealed class ConnectionTestResult {
     data class Success(val host: String, val port: Int, val latencyMs: Long) : ConnectionTestResult()
@@ -25,6 +31,11 @@ data class BroadcastSetupUiState(
     val title: String = "",
     val description: String = "",
     val platform: PlatformType = PlatformType.MULTI_DESTINATION,
+    val facebookDestination: FacebookDestination = FacebookDestination.PROFILE,
+    val facebookToken: String = "",
+    val isFacebookTokenSaved: Boolean = false,
+    val availableFacebookPages: List<FacebookPage> = emptyList(),
+    val selectedFacebookPageId: String = "",
     val rtmpUrl: String = "rtmps://live-api-s.facebook.com:443/rtmp/|rtmp://a.rtmp.youtube.com/live2",
     val streamKey: String = "",
     val youtubeStreamKey: String = "",
@@ -58,12 +69,104 @@ class BroadcastSetupViewModel(
     )
     val uiState: StateFlow<BroadcastSetupUiState> = _uiState.asStateFlow()
 
+    init {
+        val savedFbToken = facebookRepository.getSavedToken() ?: ""
+        _uiState.value = _uiState.value.copy(
+            facebookToken = savedFbToken,
+            isFacebookTokenSaved = savedFbToken.isNotBlank()
+        )
+
+        viewModelScope.launch {
+            facebookRepository.getPages().collect { pages ->
+                _uiState.value = _uiState.value.copy(
+                    availableFacebookPages = pages,
+                    selectedFacebookPageId = if (_uiState.value.selectedFacebookPageId.isBlank()) {
+                        pages.firstOrNull()?.id ?: ""
+                    } else {
+                        _uiState.value.selectedFacebookPageId
+                    }
+                )
+            }
+        }
+
+        viewModelScope.launch {
+            if (savedFbToken.isNotBlank()) {
+                facebookRepository.refreshPages()
+            }
+        }
+    }
+
+    fun updateFacebookDestination(dest: FacebookDestination) {
+        _uiState.value = _uiState.value.copy(facebookDestination = dest)
+    }
+
+    fun updateFacebookToken(token: String) {
+        val cleanToken = token.trim()
+        _uiState.value = _uiState.value.copy(
+            facebookToken = cleanToken,
+            isFacebookTokenSaved = cleanToken.isNotBlank()
+        )
+        facebookRepository.saveToken(cleanToken)
+        if (cleanToken.isNotBlank()) {
+            viewModelScope.launch {
+                facebookRepository.refreshPages()
+            }
+        }
+    }
+
+    fun selectFacebookPage(pageId: String) {
+        _uiState.value = _uiState.value.copy(selectedFacebookPageId = pageId)
+    }
+
     fun toggleAutoStartGuide(show: Boolean) {
         _uiState.value = _uiState.value.copy(showAutoStartGuideDialog = show)
     }
 
     fun updateTitle(title: String) {
         _uiState.value = _uiState.value.copy(title = title, errorMessage = null)
+    }
+
+    fun updateDescription(desc: String) {
+        _uiState.value = _uiState.value.copy(description = desc)
+    }
+
+    fun updatePlatform(platform: PlatformType) {
+        val defaultUrl = when (platform) {
+            PlatformType.FACEBOOK -> "rtmps://live-api-s.facebook.com:443/rtmp/"
+            PlatformType.YOUTUBE -> "rtmp://a.rtmp.youtube.com/live2"
+            PlatformType.CUSTOM_RTMP -> ""
+            PlatformType.MULTI_DESTINATION -> "rtmps://live-api-s.facebook.com:443/rtmp/|rtmp://a.rtmp.youtube.com/live2"
+        }
+        _uiState.value = _uiState.value.copy(
+            platform = platform,
+            rtmpUrl = defaultUrl,
+            errorMessage = null
+        )
+    }
+
+    fun updateRtmpUrl(url: String) {
+        _uiState.value = _uiState.value.copy(rtmpUrl = url)
+    }
+
+    fun updateStreamKey(key: String) {
+        _uiState.value = _uiState.value.copy(
+            streamKey = key,
+            isPersistentKeySaved = key.trim().isNotBlank()
+        )
+        prefs.edit().putString("fb_persistent_stream_key", key.trim()).apply()
+    }
+
+    fun updateYoutubeStreamKey(key: String) {
+        _uiState.value = _uiState.value.copy(youtubeStreamKey = key)
+        prefs.edit().putString("yt_persistent_stream_key", key.trim()).apply()
+    }
+
+    fun updateQuality(resolution: String, bitrate: Int, fps: Int) {
+        _uiState.value = _uiState.value.copy(
+            resolution = resolution,
+            bitrateKbps = bitrate,
+            fps = fps
+        )
     }
 
     fun testConnection() {
@@ -128,87 +231,90 @@ class BroadcastSetupViewModel(
         }
     }
 
-    fun updateDescription(desc: String) {
-        _uiState.value = _uiState.value.copy(description = desc)
-    }
-
-    fun updatePlatform(platform: PlatformType) {
-        val defaultUrl = when (platform) {
-            PlatformType.FACEBOOK -> "rtmps://live-api-s.facebook.com:443/rtmp/"
-            PlatformType.YOUTUBE -> "rtmp://a.rtmp.youtube.com/live2"
-            PlatformType.CUSTOM_RTMP -> ""
-            PlatformType.MULTI_DESTINATION -> "rtmps://live-api-s.facebook.com:443/rtmp/|rtmp://a.rtmp.youtube.com/live2"
-        }
-        _uiState.value = _uiState.value.copy(
-            platform = platform,
-            rtmpUrl = defaultUrl,
-            errorMessage = null
-        )
-    }
-
-    fun updateRtmpUrl(url: String) {
-        _uiState.value = _uiState.value.copy(rtmpUrl = url)
-    }
-
-    fun updateStreamKey(key: String) {
-        _uiState.value = _uiState.value.copy(
-            streamKey = key,
-            isPersistentKeySaved = key.trim().isNotBlank()
-        )
-        prefs.edit().putString("fb_persistent_stream_key", key.trim()).apply()
-    }
-
-    fun updateYoutubeStreamKey(key: String) {
-        _uiState.value = _uiState.value.copy(youtubeStreamKey = key)
-        prefs.edit().putString("yt_persistent_stream_key", key.trim()).apply()
-    }
-
-    fun updateQuality(resolution: String, bitrate: Int, fps: Int) {
-        _uiState.value = _uiState.value.copy(
-            resolution = resolution,
-            bitrateKbps = bitrate,
-            fps = fps
-        )
-    }
-
     fun createAndStartBroadcast(onSuccess: (broadcastId: Long) -> Unit) {
         val current = _uiState.value
 
-        val finalUrl: String
-        val finalKey: String
-
-        if (current.platform == PlatformType.MULTI_DESTINATION) {
-            val fbKey = current.streamKey.trim()
-            val ytKey = current.youtubeStreamKey.trim()
-            if (fbKey.isBlank() && ytKey.isBlank()) {
-                _uiState.value = current.copy(errorMessage = "Please enter at least one Stream Key (Facebook or YouTube)")
-                return
-            }
-            finalUrl = "rtmps://live-api-s.facebook.com:443/rtmp/|rtmp://a.rtmp.youtube.com/live2"
-            finalKey = "$fbKey|$ytKey"
-        } else {
-            finalUrl = current.rtmpUrl.trim()
-            finalKey = current.streamKey.trim()
-            if (finalUrl.isBlank()) {
-                _uiState.value = current.copy(errorMessage = "Please enter RTMP server endpoint")
-                return
-            }
-            if (finalKey.isBlank()) {
-                _uiState.value = current.copy(errorMessage = "Please enter your Live Stream Key")
-                return
-            }
-        }
-
         val streamTitle = current.title.trim().ifBlank {
-            if (current.platform == PlatformType.MULTI_DESTINATION) {
-                "Simulcast (Facebook + YouTube Live)"
-            } else {
-                "Live Stream (${current.platform.name})"
+            when (current.platform) {
+                PlatformType.MULTI_DESTINATION -> "Simulcast (Facebook + YouTube Live)"
+                PlatformType.FACEBOOK -> if (current.facebookDestination == FacebookDestination.PROFILE) "Facebook Profile Live" else "Facebook Page Live"
+                PlatformType.YOUTUBE -> "YouTube Live Stream"
+                PlatformType.CUSTOM_RTMP -> "Live Stream (RTMP)"
             }
         }
 
         viewModelScope.launch {
             _uiState.value = current.copy(isLoading = true, errorMessage = null)
+
+            var fbStreamUrl = "rtmps://live-api-s.facebook.com:443/rtmp/"
+            var fbStreamKey = current.streamKey.trim()
+
+            // Native Facebook Graph API initialization (Zero Browser!)
+            val isFbPlatform = current.platform == PlatformType.FACEBOOK || current.platform == PlatformType.MULTI_DESTINATION
+            if (isFbPlatform && current.isFacebookTokenSaved) {
+                val liveResult = if (current.facebookDestination == FacebookDestination.PROFILE) {
+                    facebookRepository.createProfileLiveStream(
+                        title = streamTitle,
+                        description = current.description.trim()
+                    )
+                } else {
+                    facebookRepository.createLiveStream(
+                        pageId = current.selectedFacebookPageId,
+                        title = streamTitle,
+                        description = current.description.trim()
+                    )
+                }
+
+                when (liveResult) {
+                    is Resource.Success -> {
+                        fbStreamUrl = liveResult.data.streamUrl
+                        fbStreamKey = liveResult.data.streamKey
+                    }
+                    is Resource.Error -> {
+                        if (fbStreamKey.isBlank()) {
+                            _uiState.value = current.copy(isLoading = false, errorMessage = liveResult.message)
+                            return@launch
+                        }
+                    }
+                    is Resource.Loading -> Unit
+                }
+            }
+
+            val finalUrl: String
+            val finalKey: String
+
+            if (current.platform == PlatformType.MULTI_DESTINATION) {
+                val ytKey = current.youtubeStreamKey.trim()
+                if (fbStreamKey.isBlank() && ytKey.isBlank()) {
+                    _uiState.value = current.copy(
+                        isLoading = false,
+                        errorMessage = "Please enter Facebook Access Token or Stream Key to stream"
+                    )
+                    return@launch
+                }
+                finalUrl = "$fbStreamUrl|rtmp://a.rtmp.youtube.com/live2"
+                finalKey = "$fbStreamKey|$ytKey"
+            } else if (current.platform == PlatformType.FACEBOOK) {
+                if (fbStreamKey.isBlank()) {
+                    _uiState.value = current.copy(
+                        isLoading = false,
+                        errorMessage = "Please enter your Facebook Access Token or Stream Key"
+                    )
+                    return@launch
+                }
+                finalUrl = fbStreamUrl
+                finalKey = fbStreamKey
+            } else {
+                finalUrl = current.rtmpUrl.trim()
+                finalKey = current.streamKey.trim()
+                if (finalUrl.isBlank() || finalKey.isBlank()) {
+                    _uiState.value = current.copy(
+                        isLoading = false,
+                        errorMessage = "Please enter RTMP server endpoint and Stream Key"
+                    )
+                    return@launch
+                }
+            }
 
             val broadcast = Broadcast(
                 title = streamTitle,

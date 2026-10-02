@@ -65,8 +65,11 @@ import com.example.ui.theme.StudioDark
 import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
+import androidx.compose.material.icons.filled.Person
+import com.example.ui.theme.StudioCardElevated
 import com.example.ui.theme.YouTubeBrandColor
 import pk.livecaster.app.broadcast.domain.model.PlatformType
+import pk.livecaster.app.broadcast.presentation.setup.FacebookDestination
 
 @Composable
 fun BroadcastSetupScreen(
@@ -234,7 +237,163 @@ fun BroadcastSetupScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                if (uiState.platform == PlatformType.MULTI_DESTINATION) {
+                if (uiState.platform == PlatformType.FACEBOOK) {
+                    // Facebook Native Live Target Selector: Profile vs Page
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(StudioCard)
+                            .border(1.dp, FacebookBrandColor.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+                            .padding(14.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Facebook Stream Target",
+                                style = MaterialTheme.typography.labelMedium.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextPrimary
+                                )
+                            )
+                            if (uiState.isFacebookTokenSaved) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(StudioGreen.copy(alpha = 0.2f))
+                                        .border(0.5.dp, StudioGreen, RoundedCornerShape(6.dp))
+                                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        text = "100% Native API",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            color = StudioGreen,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            PlatformChip(
+                                name = "👤 My Profile",
+                                icon = Icons.Default.Person,
+                                isSelected = uiState.facebookDestination == FacebookDestination.PROFILE,
+                                onClick = { viewModel.updateFacebookDestination(FacebookDestination.PROFILE) },
+                                modifier = Modifier.weight(1f)
+                            )
+                            PlatformChip(
+                                name = "📄 Facebook Page",
+                                icon = Icons.Default.Public,
+                                isSelected = uiState.facebookDestination == FacebookDestination.PAGE,
+                                onClick = { viewModel.updateFacebookDestination(FacebookDestination.PAGE) },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+
+                        if (uiState.facebookDestination == FacebookDestination.PAGE && uiState.availableFacebookPages.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = "Select Target Page:",
+                                style = MaterialTheme.typography.labelSmall.copy(color = TextSecondary)
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                uiState.availableFacebookPages.forEach { page ->
+                                    val isSelected = uiState.selectedFacebookPageId == page.id
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(if (isSelected) StudioCyan.copy(alpha = 0.15f) else StudioCardElevated)
+                                            .border(1.dp, if (isSelected) StudioCyan else StudioBorder, RoundedCornerShape(8.dp))
+                                            .clickable { viewModel.selectFacebookPage(page.id) }
+                                            .padding(horizontal = 10.dp, vertical = 8.dp)
+                                    ) {
+                                        Text(
+                                            text = page.name,
+                                            style = MaterialTheme.typography.bodySmall.copy(
+                                                color = if (isSelected) StudioCyan else TextPrimary,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        // Facebook Access Token Input
+                        OutlinedTextField(
+                            value = uiState.facebookToken,
+                            onValueChange = { viewModel.updateFacebookToken(it) },
+                            label = { Text("Facebook Access Token (User Token)") },
+                            placeholder = { Text("Paste User Token (EAA...)") },
+                            singleLine = true,
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Public,
+                                    contentDescription = null,
+                                    tint = FacebookBrandColor
+                                )
+                            },
+                            trailingIcon = {
+                                if (uiState.isFacebookTokenSaved) {
+                                    Icon(
+                                        imageVector = Icons.Default.CheckCircle,
+                                        contentDescription = "Saved",
+                                        tint = StudioGreen,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("facebook_token_input")
+                        )
+
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = if (uiState.isFacebookTokenSaved)
+                                "✅ 1-Tap Native Active: When you tap 'Start Live', LiveCaster automatically creates and publishes the stream directly to your ${if (uiState.facebookDestination == FacebookDestination.PROFILE) "Profile feed" else "Page"} without opening any browser!"
+                            else
+                                "Paste your Facebook User Access Token here to publish directly without browser permission issues.",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                color = if (uiState.isFacebookTokenSaved) StudioGreen else TextMuted
+                            )
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    OutlinedTextField(
+                        value = uiState.streamKey,
+                        onValueChange = { viewModel.updateStreamKey(it) },
+                        label = { Text("Or Stream Key (Fallback / Manual)") },
+                        placeholder = { Text("FB-... (Optional if token provided)") },
+                        singleLine = true,
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.FlashOn,
+                                contentDescription = null,
+                                tint = StudioAmber
+                            )
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("broadcast_stream_key_input")
+                    )
+                } else if (uiState.platform == PlatformType.MULTI_DESTINATION) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -260,90 +419,74 @@ fun BroadcastSetupScreen(
 
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    // 1-Tap Mobile Direct Broadcast Indicator Card
-                    Box(
+                    // Facebook Target & Token
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(12.dp))
                             .background(StudioCard)
-                            .border(1.dp, if (uiState.isPersistentKeySaved) StudioGreen.copy(alpha = 0.5f) else StudioBorder, RoundedCornerShape(12.dp))
+                            .border(1.dp, FacebookBrandColor.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
                             .padding(12.dp)
                     ) {
-                        Column {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = Icons.Default.FlashOn,
-                                        contentDescription = null,
-                                        tint = if (uiState.isPersistentKeySaved) StudioGreen else StudioAmber,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = if (uiState.isPersistentKeySaved) "1-Tap Mobile Stream Ready" else "1-Tap Mobile Live Setup",
-                                        style = MaterialTheme.typography.labelMedium.copy(
-                                            fontWeight = FontWeight.Bold,
-                                            color = if (uiState.isPersistentKeySaved) StudioGreen else StudioAmber
-                                        )
-                                    )
-                                }
-
-                                Text(
-                                    text = "Auto-Start Guide ⓘ",
-                                    style = MaterialTheme.typography.labelSmall.copy(
-                                        color = StudioCyan,
-                                        fontWeight = FontWeight.Bold
-                                    ),
-                                    modifier = Modifier
-                                        .clickable { viewModel.toggleAutoStartGuide(true) }
-                                        .testTag("auto_start_guide_trigger")
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = if (uiState.isPersistentKeySaved)
-                                    "Persistent Key is saved in memory. When you tap 'Start Live', LiveCaster directly broadcasts from mobile without opening any browser."
-                                else
-                                    "Paste your Facebook Persistent Stream Key once below. It is automatically remembered for 1-tap broadcasts.",
-                                style = MaterialTheme.typography.bodySmall.copy(color = TextSecondary)
+                        Text(
+                            text = "Facebook Destination",
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary
+                            )
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            PlatformChip(
+                                name = "👤 Profile",
+                                icon = Icons.Default.Person,
+                                isSelected = uiState.facebookDestination == FacebookDestination.PROFILE,
+                                onClick = { viewModel.updateFacebookDestination(FacebookDestination.PROFILE) },
+                                modifier = Modifier.weight(1f)
+                            )
+                            PlatformChip(
+                                name = "📄 Page",
+                                icon = Icons.Default.Public,
+                                isSelected = uiState.facebookDestination == FacebookDestination.PAGE,
+                                onClick = { viewModel.updateFacebookDestination(FacebookDestination.PAGE) },
+                                modifier = Modifier.weight(1f)
                             )
                         }
-                    }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
 
-                    OutlinedTextField(
-                        value = uiState.streamKey,
-                        onValueChange = { viewModel.updateStreamKey(it) },
-                        label = { Text("Facebook Persistent Stream Key") },
-                        placeholder = { Text("Paste FB Live Stream Key (starts with FB-...)") },
-                        singleLine = true,
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Public,
-                                contentDescription = null,
-                                tint = FacebookBrandColor
-                            )
-                        },
-                        trailingIcon = {
-                            if (uiState.isPersistentKeySaved) {
+                        OutlinedTextField(
+                            value = uiState.facebookToken,
+                            onValueChange = { viewModel.updateFacebookToken(it) },
+                            label = { Text("Facebook Access Token (Direct 1-Tap API)") },
+                            placeholder = { Text("Paste User Token (EAA...)") },
+                            singleLine = true,
+                            leadingIcon = {
                                 Icon(
-                                    imageVector = Icons.Default.CheckCircle,
-                                    contentDescription = "Saved",
-                                    tint = StudioGreen,
-                                    modifier = Modifier.size(18.dp)
+                                    imageVector = Icons.Default.Public,
+                                    contentDescription = null,
+                                    tint = FacebookBrandColor
                                 )
-                            }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("broadcast_fb_stream_key_input")
-                    )
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        OutlinedTextField(
+                            value = uiState.streamKey,
+                            onValueChange = { viewModel.updateStreamKey(it) },
+                            label = { Text("Or Facebook Stream Key (Fallback)") },
+                            placeholder = { Text("Paste FB Live Stream Key") },
+                            singleLine = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("broadcast_fb_stream_key_input")
+                        )
+                    }
 
                     Spacer(modifier = Modifier.height(12.dp))
 

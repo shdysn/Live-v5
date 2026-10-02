@@ -18,3 +18,8 @@ data class FacebookLiveVideoDto(
     val secure_stream_url: String,
     val status: String
 )
+
+data class FacebookUserDto(
+    val id: String,
+    val name: String? = null
+)
