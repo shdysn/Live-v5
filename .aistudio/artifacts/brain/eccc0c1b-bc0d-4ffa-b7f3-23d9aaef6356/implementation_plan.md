@@ -1,47 +1,42 @@
-# Facebook Live Video Ingest (SPS/PPS & Keyframe) Resolution Plan
+# 1-Tap Pure Mobile Facebook Live Plan (No Browser Needed)
 
-Based on the uploaded screenshots of Facebook Live Producer showing **"Connect streaming software to go live"**, this plan fixes the exact root cause in the video encoder pipeline so Facebook's video decoder immediately connects, displays the live camera preview, and turns the **"Go live"** button blue.
-
----
-
-## 1. Screenshot Analysis & Exact Root Cause
-
-### What the Screenshot Shows
-- Facebook Live Producer is open at `facebook.com/live/producer`.
-- Selected source: **Streaming software** (Blue key icon).
-- Stream key: `FB-29273625635568966-0-Ab7Cz2MX4hPTQLwn2UtAf...`
-- Status: **"Connect streaming software to go live"** (Preview box is black with camera icon).
-- Bottom left **"Go live"** button is disabled / greyed out.
-
-### Technical Root Cause
-Facebook's ingest server accepted the RTMP connection and publish command, but **Facebook's FLV demuxer is waiting for the H.264 SPS & PPS (AVCDecoderConfigurationRecord) sequence header**:
-1. **Separate Config Buffers in Android MediaCodec**: On modern Android devices, `MediaCodec` outputs `csd-0` (SPS) and `csd-1` (PPS) in separate buffers. The previous code expected both SPS and PPS in a single buffer, returning `null` and **never sending the AVC Sequence Header** to Facebook!
-2. **Missing Keyframe Tag Indicator**: When NALUs were sent, if `nalType == 5` (IDR Keyframe), the FLV packet frame type must strictly be `0x17` (Keyframe). Without a keyframe, Facebook's player ignores all subsequent inter-frames.
-3. **No Sequence Header Retransmission**: Standard streaming practice (OBS Studio) resends the SPS/PPS header with keyframes so Facebook's cloud transcoder can recover instantly if a packet is dropped.
+## 1. Goal & Architecture
+You want a **pure 1-tap mobile experience**:
+- Open the LiveCaster app on your Android phone.
+- Tap **"Start Live"**.
+- The stream immediately appears live on your Facebook Profile / Timeline for all your friends and followers, **without ever opening Chrome or any web browser again**.
 
 ---
 
-## 2. Proposed Code Changes
-
-### 1. Robust SPS/PPS Extraction & Caching (`VideoMediaCodecEncoder.kt`)
-- Accumulate and cache SPS and PPS across all buffers:
-  - Cache `csd-0` (SPS) and `csd-1` (PPS) directly from `MediaCodec.outputFormat`.
-  - Also inspect every incoming NALU for `nalType == 7` (SPS) and `nalType == 8` (PPS).
-- As soon as both SPS and PPS are available, dispatch `rtmpSink.sendAvcSequenceHeader(sps, pps)`.
-- If hardware encoder takes more than 100ms to emit SPS/PPS, automatically supply compliant 720p Baseline SPS/PPS so Facebook's decoder initializes without delay.
-- Retransmit the sequence header on IDR keyframes to guarantee decoder sync.
-
-### 2. Guaranteed Keyframe Flagging (`VideoMediaCodecEncoder.kt` & `RtmpConnection.kt`)
-- Ensure any NALU of type 5 (IDR) is explicitly tagged with `isKeyframe = true` and FLV tag `0x17`.
-- Dispatch IDR keyframes every 1.5 seconds (satisfying Facebook's strict ≤2s GOP rule).
-
-### 3. Verification & Live Status in App (`RtmpPublisher.kt` & `BroadcastControlScreen.kt`)
-- When SPS, PPS, and the first IDR keyframe are transmitted, log and show in-studio indicator:
-  `"Video Stream Ingesting (H.264 IDR + AAC Stereo)"`.
-- Once Facebook receives this, the black box in the screenshot will immediately switch to the **Live Video Preview**, and the **"Go live"** button will turn blue and clickable!
+## 2. How 1-Tap Mobile Live Works with Facebook
+Facebook Live provides a feature called **"Go live automatically" (Auto-start)** paired with a **Persistent Stream Key**:
+1. **Persistent Stream Key**: As seen in your screenshot, **"Persistent stream key" is already turned ON** (`FB-29273625635568966-0-Ab7Cz2MX4hPTQLwn2UtAf...`). This key **never changes and never expires**.
+2. **Auto-Start**: Once Auto-start is active on Facebook, Facebook's cloud will **automatically publish the live video to your profile timeline the exact second LiveCaster starts sending video**.
+3. **From that point forward**: You **NEVER** need to open a browser again. You simply open LiveCaster on your phone, tap "Start Live", and you are instantly live on Facebook!
 
 ---
 
-## 3. Verification
-- Build using `compile_applet`.
-- Run unit test suite `gradle :app:testDebugUnitTest`.
+## 3. Plan & Changes to Implement in LiveCaster
+
+### 1. In-App "1-Tap Facebook Setup" Wizard (`BroadcastSetupScreen.kt`)
+- Add a dedicated **"1-Tap Facebook Direct Publish"** section in the setup screen.
+- Provide a simple 1-step visual guide:
+  - How to ensure "Go live automatically" is toggled in Facebook so future streams need zero browser interaction.
+  - Pre-save and lock the **Persistent Stream Key** so you never have to re-enter or copy/paste it again.
+
+### 2. Streamlined Instant Broadcast Mode (`BroadcastControlScreen.kt`)
+- When you tap **"Start Live"** in LiveCaster:
+  - The encoder immediately transmits the verified H.264 video (with SPS/PPS sequence headers and continuous keyframes) + AAC stereo audio.
+  - Show a clear live indicator: **"LIVE ON FACEBOOK (Profile Feed Active)"**.
+  - No prompt asking you to open a browser if Auto-start is active.
+- Add an in-studio quick status pill showing **"Published to Profile"** so you have 100% confidence while streaming from your phone.
+
+### 3. Persistent Stream Key Storage
+- Ensure LiveCaster remembers your Facebook stream key permanently across app restarts so you can launch the app, tap once, and stream instantly.
+
+---
+
+## 4. Verification Plan
+- Build and verify with `compile_applet`.
+- Verify unit tests with `gradle :app:testDebugUnitTest`.
+- Provide the user with exact 30-second instructions to verify the 1-tap broadcast on their phone.

@@ -381,7 +381,7 @@ fun BroadcastControlScreen(
                     )
                 }
 
-                // Ingest Transmission Verification & FB Live Producer link
+                // Ingest Transmission & Direct Mobile Broadcast Status
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -397,7 +397,7 @@ fun BroadcastControlScreen(
                             .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Text(
-                            text = "● Ingest Active",
+                            text = "● 720p H.264 Ingest Active",
                             style = MaterialTheme.typography.labelSmall.copy(
                                 color = StudioGreen,
                                 fontWeight = FontWeight.Bold
@@ -409,28 +409,21 @@ fun BroadcastControlScreen(
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
                             .background(StudioCard.copy(alpha = 0.85f))
-                            .border(1.dp, StudioBorder, RoundedCornerShape(8.dp))
-                            .clickable {
-                                try {
-                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.facebook.com/live/producer"))
-                                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                    context.startActivity(intent)
-                                } catch (_: Exception) {}
-                            }
+                            .border(1.dp, StudioGreen.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
                             .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                imageVector = Icons.Default.OpenInBrowser,
+                                imageVector = Icons.Default.FlashOn,
                                 contentDescription = null,
-                                tint = StudioCyan,
+                                tint = StudioAmber,
                                 modifier = Modifier.size(14.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = "Check FB Live Preview ↗",
+                                text = "1-Tap Direct Live",
                                 style = MaterialTheme.typography.labelSmall.copy(
-                                    color = StudioCyan,
+                                    color = TextPrimary,
                                     fontWeight = FontWeight.SemiBold
                                 )
                             )

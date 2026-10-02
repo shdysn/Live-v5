@@ -1,5 +1,6 @@
 package pk.livecaster.app.broadcast.presentation.setup
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -34,17 +35,32 @@ data class BroadcastSetupUiState(
     val isTestingConnection: Boolean = false,
     val testConnectionResult: ConnectionTestResult? = null,
     val errorMessage: String? = null,
-    val createdBroadcastId: Long? = null
+    val createdBroadcastId: Long? = null,
+    val showAutoStartGuideDialog: Boolean = false,
+    val isPersistentKeySaved: Boolean = false
 )
 
 class BroadcastSetupViewModel(
+    private val context: Context,
     private val createBroadcastUseCase: CreateBroadcastUseCase,
     private val facebookRepository: FacebookRepository,
     private val youtubeRepository: YouTubeRepository
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(BroadcastSetupUiState())
+    private val prefs = context.getSharedPreferences("livecaster_stream_prefs", Context.MODE_PRIVATE)
+
+    private val _uiState = MutableStateFlow(
+        BroadcastSetupUiState(
+            streamKey = prefs.getString("fb_persistent_stream_key", "") ?: "",
+            youtubeStreamKey = prefs.getString("yt_persistent_stream_key", "") ?: "",
+            isPersistentKeySaved = !prefs.getString("fb_persistent_stream_key", "").isNullOrBlank()
+        )
+    )
     val uiState: StateFlow<BroadcastSetupUiState> = _uiState.asStateFlow()
+
+    fun toggleAutoStartGuide(show: Boolean) {
+        _uiState.value = _uiState.value.copy(showAutoStartGuideDialog = show)
+    }
 
     fun updateTitle(title: String) {
         _uiState.value = _uiState.value.copy(title = title, errorMessage = null)
@@ -135,11 +151,16 @@ class BroadcastSetupViewModel(
     }
 
     fun updateStreamKey(key: String) {
-        _uiState.value = _uiState.value.copy(streamKey = key)
+        _uiState.value = _uiState.value.copy(
+            streamKey = key,
+            isPersistentKeySaved = key.trim().isNotBlank()
+        )
+        prefs.edit().putString("fb_persistent_stream_key", key.trim()).apply()
     }
 
     fun updateYoutubeStreamKey(key: String) {
         _uiState.value = _uiState.value.copy(youtubeStreamKey = key)
+        prefs.edit().putString("yt_persistent_stream_key", key.trim()).apply()
     }
 
     fun updateQuality(resolution: String, bitrate: Int, fps: Int) {

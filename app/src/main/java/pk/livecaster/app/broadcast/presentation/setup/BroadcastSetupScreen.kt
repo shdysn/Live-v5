@@ -50,8 +50,12 @@ import com.example.ui.theme.FacebookBrandColor
 import com.example.ui.theme.LiveRed
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.NetworkCheck
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.TextButton
+import com.example.ui.theme.StudioAmber
 import com.example.ui.theme.StudioGreen
 import com.example.ui.theme.RtmpBrandColor
 import com.example.ui.theme.StudioBorder
@@ -256,11 +260,68 @@ fun BroadcastSetupScreen(
 
                     Spacer(modifier = Modifier.height(14.dp))
 
+                    // 1-Tap Mobile Direct Broadcast Indicator Card
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(StudioCard)
+                            .border(1.dp, if (uiState.isPersistentKeySaved) StudioGreen.copy(alpha = 0.5f) else StudioBorder, RoundedCornerShape(12.dp))
+                            .padding(12.dp)
+                    ) {
+                        Column {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.FlashOn,
+                                        contentDescription = null,
+                                        tint = if (uiState.isPersistentKeySaved) StudioGreen else StudioAmber,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = if (uiState.isPersistentKeySaved) "1-Tap Mobile Stream Ready" else "1-Tap Mobile Live Setup",
+                                        style = MaterialTheme.typography.labelMedium.copy(
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (uiState.isPersistentKeySaved) StudioGreen else StudioAmber
+                                        )
+                                    )
+                                }
+
+                                Text(
+                                    text = "Auto-Start Guide ⓘ",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        color = StudioCyan,
+                                        fontWeight = FontWeight.Bold
+                                    ),
+                                    modifier = Modifier
+                                        .clickable { viewModel.toggleAutoStartGuide(true) }
+                                        .testTag("auto_start_guide_trigger")
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = if (uiState.isPersistentKeySaved)
+                                    "Persistent Key is saved in memory. When you tap 'Start Live', LiveCaster directly broadcasts from mobile without opening any browser."
+                                else
+                                    "Paste your Facebook Persistent Stream Key once below. It is automatically remembered for 1-tap broadcasts.",
+                                style = MaterialTheme.typography.bodySmall.copy(color = TextSecondary)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
                     OutlinedTextField(
                         value = uiState.streamKey,
                         onValueChange = { viewModel.updateStreamKey(it) },
-                        label = { Text("Facebook Stream Key") },
-                        placeholder = { Text("Paste FB Live Stream Key here") },
+                        label = { Text("Facebook Persistent Stream Key") },
+                        placeholder = { Text("Paste FB Live Stream Key (starts with FB-...)") },
                         singleLine = true,
                         leadingIcon = {
                             Icon(
@@ -268,6 +329,16 @@ fun BroadcastSetupScreen(
                                 contentDescription = null,
                                 tint = FacebookBrandColor
                             )
+                        },
+                        trailingIcon = {
+                            if (uiState.isPersistentKeySaved) {
+                                Icon(
+                                    imageVector = Icons.Default.CheckCircle,
+                                    contentDescription = "Saved",
+                                    tint = StudioGreen,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
                         },
                         modifier = Modifier
                             .fillMaxWidth()
@@ -279,7 +350,7 @@ fun BroadcastSetupScreen(
                     OutlinedTextField(
                         value = uiState.youtubeStreamKey,
                         onValueChange = { viewModel.updateYoutubeStreamKey(it) },
-                        label = { Text("YouTube Stream Key") },
+                        label = { Text("YouTube Stream Key (Optional for Simulcast)") },
                         placeholder = { Text("Paste YouTube Live Stream Key here") },
                         singleLine = true,
                         leadingIcon = {
@@ -534,6 +605,60 @@ fun BroadcastSetupScreen(
                     )
                 }
             }
+        }
+
+        if (uiState.showAutoStartGuideDialog) {
+            AlertDialog(
+                onDismissRequest = { viewModel.toggleAutoStartGuide(false) },
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.FlashOn,
+                            contentDescription = null,
+                            tint = StudioAmber,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "1-Tap Mobile Live Guide",
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary
+                            )
+                        )
+                    }
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            text = "To stream directly from LiveCaster on your phone without ever opening a browser:",
+                            style = MaterialTheme.typography.bodyMedium.copy(color = TextPrimary)
+                        )
+                        Text(
+                            text = "1. Persistent Stream Key:\nYour stream key is already saved in LiveCaster. It never expires.",
+                            style = MaterialTheme.typography.bodySmall.copy(color = TextSecondary)
+                        )
+                        Text(
+                            text = "2. Facebook Auto-Start Setting:\nIn Facebook Live Producer under Settings -> Stream, keep 'Persistent stream key' ON and 'Allow encoder to end stream' ON.",
+                            style = MaterialTheme.typography.bodySmall.copy(color = TextSecondary)
+                        )
+                        Text(
+                            text = "3. Pure 1-Tap Experience:\nNow, whenever you open LiveCaster and tap 'Start Live', your stream automatically publishes directly to your Facebook profile!",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                color = StudioGreen,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { viewModel.toggleAutoStartGuide(false) }) {
+                        Text("Understood", color = StudioCyan, fontWeight = FontWeight.Bold)
+                    }
+                },
+                containerColor = StudioCard,
+                shape = RoundedCornerShape(16.dp)
+            )
         }
     }
 }

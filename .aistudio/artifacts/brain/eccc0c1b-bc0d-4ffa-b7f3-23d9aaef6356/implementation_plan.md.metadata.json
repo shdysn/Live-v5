@@ -1,6 +1,6 @@
 {
-  "summary":  "Comprehensive fix based on the user's Facebook Live Producer screenshot. Resolves the missing AVC sequence header (SPS/PPS) issue where Android MediaCodec outputs SPS and PPS in separate buffers, causing Facebook's decoder to never initialize and display 'Connect streaming software to go live'. Ensures SPS and PPS are reliably extracted, cached, and sent immediately with fallback Baseline 720p headers and periodic IDR retransmission.",
-  "updatedAt":  "2026-10-02T09:29:05.294170853Z",
+  "summary":  "Implementation plan for 1-Tap Pure Mobile Live streaming to Facebook profile. Includes step-by-step 1-time Auto-Start configuration in Facebook with Persistent Stream Key so the user never needs to touch a browser again, plus in-app 1-Tap live broadcast flow and auto-publish detection.",
+  "updatedAt":  "2026-10-02T09:48:44.013762615Z",
   "requestFeedback":  true,
   "userFacing":  true
 }

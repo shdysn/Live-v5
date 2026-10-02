@@ -88,6 +88,7 @@ fun LiveCasterNavGraph(
         composable(Screen.BroadcastSetup.route) {
             val viewModel = remember {
                 BroadcastSetupViewModel(
+                    appContainer.context,
                     appContainer.createBroadcastUseCase,
                     appContainer.facebookRepository,
                     appContainer.youtubeRepository
