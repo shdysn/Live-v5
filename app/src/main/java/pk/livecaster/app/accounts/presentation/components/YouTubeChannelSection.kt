@@ -2,6 +2,7 @@ package pk.livecaster.app.accounts.presentation.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -60,6 +61,14 @@ fun YouTubeChannelSection(
     onCancel: () -> Unit,
     onConnectChannel: () -> Unit,
     onDisconnect: () -> Unit,
+    customChannelName: String = "",
+    onCustomChannelNameChange: ((String) -> Unit)? = null,
+    customStreamKey: String = "",
+    onCustomStreamKeyChange: ((String) -> Unit)? = null,
+    customClientId: String = "",
+    onCustomClientIdChange: ((String) -> Unit)? = null,
+    showDevOAuth: Boolean = false,
+    onToggleDevOAuth: (() -> Unit)? = null,
     onLoginWithChrome: (() -> Unit)? = null,
     onOpenLiveStudio: (() -> Unit)? = null,
     modifier: Modifier = Modifier
@@ -152,7 +161,7 @@ fun YouTubeChannelSection(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = "Connected Channel",
                             style = MaterialTheme.typography.labelSmall.copy(color = TextMuted)
@@ -162,7 +171,8 @@ fun YouTubeChannelSection(
                             style = MaterialTheme.typography.bodyMedium.copy(
                                 fontWeight = FontWeight.SemiBold,
                                 color = TextPrimary
-                            )
+                            ),
+                            maxLines = 1
                         )
                     }
                     Row {
@@ -194,9 +204,10 @@ fun YouTubeChannelSection(
 
             // State B: Pre-Login Button
             if (!isConnected && !isLoggedIn) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    // Primary One-Tap Connect
                     Button(
-                        onClick = onLoginWithChrome ?: onContinueWithGoogle,
+                        onClick = onContinueWithGoogle,
                         colors = ButtonDefaults.buttonColors(containerColor = YouTubeBrandColor),
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier
@@ -210,9 +221,9 @@ fun YouTubeChannelSection(
                             tint = Color.White,
                             modifier = Modifier.size(20.dp)
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = "Login via Chrome (Official Google)",
+                            text = "Continue with Google",
                             style = MaterialTheme.typography.bodyMedium.copy(
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White
@@ -220,13 +231,14 @@ fun YouTubeChannelSection(
                         )
                     }
 
+                    // Direct link to YouTube Live Studio to get stream key
                     if (onOpenLiveStudio != null) {
                         OutlinedButton(
                             onClick = onOpenLiveStudio,
                             shape = RoundedCornerShape(10.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(44.dp)
+                                .height(42.dp)
                                 .testTag("open_yt_live_studio_button")
                         ) {
                             Icon(
@@ -243,6 +255,60 @@ fun YouTubeChannelSection(
                                     color = TextPrimary
                                 )
                             )
+                        }
+                    }
+
+                    // Developer OAuth option
+                    if (onToggleDevOAuth != null) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            Text(
+                                text = if (showDevOAuth) "Hide Google Client ID ▲" else "Custom Google Client ID (OAuth) ▼",
+                                style = MaterialTheme.typography.labelSmall.copy(color = TextMuted),
+                                modifier = Modifier
+                                    .padding(vertical = 4.dp)
+                                    .clickable { onToggleDevOAuth() }
+                            )
+                        }
+
+                        if (showDevOAuth) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(StudioDark.copy(alpha = 0.6f))
+                                    .border(1.dp, StudioBorder, RoundedCornerShape(8.dp))
+                                    .padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    text = "Google Cloud Console OAuth",
+                                    style = MaterialTheme.typography.labelMedium.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        color = TextPrimary
+                                    )
+                                )
+                                androidx.compose.material3.OutlinedTextField(
+                                    value = customClientId,
+                                    onValueChange = { onCustomClientIdChange?.invoke(it) },
+                                    label = { Text("Google OAuth Client ID") },
+                                    placeholder = { Text("e.g. 123...apps.googleusercontent.com") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                if (onLoginWithChrome != null) {
+                                    Button(
+                                        onClick = onLoginWithChrome,
+                                        colors = ButtonDefaults.buttonColors(containerColor = YouTubeBrandColor),
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier.fillMaxWidth().height(40.dp)
+                                    ) {
+                                        Text("Launch Chrome OAuth")
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -292,6 +358,30 @@ fun YouTubeChannelSection(
                         onItemSelected = onSelectChannel,
                         testTag = "youtube_channel_dropdown"
                     )
+
+                    // If custom channel name selected
+                    if (selectedChannel.startsWith("+") && onCustomChannelNameChange != null) {
+                        androidx.compose.material3.OutlinedTextField(
+                            value = customChannelName,
+                            onValueChange = onCustomChannelNameChange,
+                            label = { Text("Enter Custom YouTube Channel Name") },
+                            placeholder = { Text("e.g. Awais Official Channel") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
+                    // Optional Stream Key Input
+                    if (onCustomStreamKeyChange != null) {
+                        androidx.compose.material3.OutlinedTextField(
+                            value = customStreamKey,
+                            onValueChange = onCustomStreamKeyChange,
+                            label = { Text("YouTube Stream Key (Optional)") },
+                            placeholder = { Text("Paste YouTube Live Stream Key or leave blank") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
 
                     // Permissions Checklist
                     Text(

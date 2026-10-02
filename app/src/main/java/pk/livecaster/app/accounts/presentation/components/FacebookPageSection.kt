@@ -2,6 +2,7 @@ package pk.livecaster.app.accounts.presentation.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -60,6 +61,14 @@ fun FacebookPageSection(
     onCancel: () -> Unit,
     onConnectPage: () -> Unit,
     onDisconnect: () -> Unit,
+    customPageName: String = "",
+    onCustomPageNameChange: ((String) -> Unit)? = null,
+    customStreamKey: String = "",
+    onCustomStreamKeyChange: ((String) -> Unit)? = null,
+    customAppId: String = "",
+    onCustomAppIdChange: ((String) -> Unit)? = null,
+    showDevOAuth: Boolean = false,
+    onToggleDevOAuth: (() -> Unit)? = null,
     onLoginWithChrome: (() -> Unit)? = null,
     onOpenLiveProducer: (() -> Unit)? = null,
     modifier: Modifier = Modifier
@@ -152,7 +161,7 @@ fun FacebookPageSection(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = "Connected Page",
                             style = MaterialTheme.typography.labelSmall.copy(color = TextMuted)
@@ -162,7 +171,8 @@ fun FacebookPageSection(
                             style = MaterialTheme.typography.bodyMedium.copy(
                                 fontWeight = FontWeight.SemiBold,
                                 color = TextPrimary
-                            )
+                            ),
+                            maxLines = 1
                         )
                     }
                     Row {
@@ -194,9 +204,10 @@ fun FacebookPageSection(
 
             // State B: Pre-Login Button
             if (!isConnected && !isLoggedIn) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    // Primary One-Tap Connect
                     Button(
-                        onClick = onLoginWithChrome ?: onContinueWithFacebook,
+                        onClick = onContinueWithFacebook,
                         colors = ButtonDefaults.buttonColors(containerColor = FacebookBrandColor),
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier
@@ -207,11 +218,12 @@ fun FacebookPageSection(
                         Icon(
                             imageVector = Icons.Default.Public,
                             contentDescription = null,
-                            modifier = Modifier.size(18.dp)
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = "Login via Chrome (Official Site)",
+                            text = "Continue with Facebook",
                             style = MaterialTheme.typography.bodyMedium.copy(
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White
@@ -219,13 +231,14 @@ fun FacebookPageSection(
                         )
                     }
 
+                    // Direct link to Facebook Live Producer to get stream key
                     if (onOpenLiveProducer != null) {
                         OutlinedButton(
                             onClick = onOpenLiveProducer,
                             shape = RoundedCornerShape(10.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(44.dp)
+                                .height(42.dp)
                                 .testTag("open_fb_live_producer_button")
                         ) {
                             Icon(
@@ -242,6 +255,60 @@ fun FacebookPageSection(
                                     color = TextPrimary
                                 )
                             )
+                        }
+                    }
+
+                    // Developer OAuth option
+                    if (onToggleDevOAuth != null) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            Text(
+                                text = if (showDevOAuth) "Hide Meta App ID ▲" else "Custom Meta App ID (OAuth) ▼",
+                                style = MaterialTheme.typography.labelSmall.copy(color = TextMuted),
+                                modifier = Modifier
+                                    .padding(vertical = 4.dp)
+                                    .clickable { onToggleDevOAuth() }
+                            )
+                        }
+
+                        if (showDevOAuth) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(StudioDark.copy(alpha = 0.6f))
+                                    .border(1.dp, StudioBorder, RoundedCornerShape(8.dp))
+                                    .padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    text = "Meta for Developers OAuth",
+                                    style = MaterialTheme.typography.labelMedium.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        color = TextPrimary
+                                    )
+                                )
+                                androidx.compose.material3.OutlinedTextField(
+                                    value = customAppId,
+                                    onValueChange = { onCustomAppIdChange?.invoke(it) },
+                                    label = { Text("Meta App ID") },
+                                    placeholder = { Text("e.g. 192837465019283") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                if (onLoginWithChrome != null) {
+                                    Button(
+                                        onClick = onLoginWithChrome,
+                                        colors = ButtonDefaults.buttonColors(containerColor = FacebookBrandColor),
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier.fillMaxWidth().height(40.dp)
+                                    ) {
+                                        Text("Launch Chrome OAuth")
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -291,6 +358,30 @@ fun FacebookPageSection(
                         onItemSelected = onSelectPage,
                         testTag = "facebook_page_dropdown"
                     )
+
+                    // If custom page name selected or needed
+                    if (selectedPage.startsWith("+") && onCustomPageNameChange != null) {
+                        androidx.compose.material3.OutlinedTextField(
+                            value = customPageName,
+                            onValueChange = onCustomPageNameChange,
+                            label = { Text("Enter Custom Facebook Page Name") },
+                            placeholder = { Text("e.g. Awais Live Studio PK") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
+                    // Optional Stream Key Input
+                    if (onCustomStreamKeyChange != null) {
+                        androidx.compose.material3.OutlinedTextField(
+                            value = customStreamKey,
+                            onValueChange = onCustomStreamKeyChange,
+                            label = { Text("Facebook Stream Key (Optional)") },
+                            placeholder = { Text("Paste FB Live key from Producer or leave blank") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
 
                     // Permissions Checklist
                     Text(

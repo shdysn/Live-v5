@@ -16,11 +16,19 @@ import pk.livecaster.app.youtube.domain.repository.YouTubeRepository
 data class ConnectAccountsUiState(
     // Facebook section state
     val isFacebookLoggedIn: Boolean = false,
-    val selectedFacebookPage: String = "",
-    val availableFacebookPages: List<String> = emptyList(),
+    val selectedFacebookPage: String = "Official Live Stream PK",
+    val customPageName: String = "",
+    val customPageStreamKey: String = "",
+    val availableFacebookPages: List<String> = listOf(
+        "Official Live Stream PK",
+        "Awais Studio Broadcast",
+        "Daily News & Talk PK",
+        "+ Enter Custom Page Name..."
+    ),
     val isFacebookConnected: Boolean = false,
     val facebookConnectedName: String = "",
     val customFacebookAppId: String = "",
+    val showFacebookDevOAuth: Boolean = false,
     val facebookPermissions: List<String> = listOf(
         "View managed Pages",
         "Create live broadcasts",
@@ -29,11 +37,19 @@ data class ConnectAccountsUiState(
 
     // YouTube section state
     val isGoogleLoggedIn: Boolean = false,
-    val selectedYouTubeChannel: String = "",
-    val availableYouTubeChannels: List<String> = emptyList(),
+    val selectedYouTubeChannel: String = "Official YouTube Studio",
+    val customChannelName: String = "",
+    val customChannelStreamKey: String = "",
+    val availableYouTubeChannels: List<String> = listOf(
+        "Official YouTube Studio",
+        "Awais Live PK",
+        "Live Broadcast Pakistan",
+        "+ Enter Custom Channel Name..."
+    ),
     val isYouTubeConnected: Boolean = false,
     val youtubeConnectedName: String = "",
     val customGoogleClientId: String = "",
+    val showYouTubeDevOAuth: Boolean = false,
     val youTubePermissions: List<String> = listOf(
         "View YouTube Channel",
         "Create and manage live broadcasts",
@@ -51,6 +67,20 @@ class ConnectAccountsViewModel(
     private val oAuthChromeManager: OAuthChromeManager? = null
 ) : ViewModel() {
 
+    private val defaultFbPages = listOf(
+        "Official Live Stream PK",
+        "Awais Studio Broadcast",
+        "Daily News & Talk PK",
+        "+ Enter Custom Page Name..."
+    )
+
+    private val defaultYtChannels = listOf(
+        "Official YouTube Studio",
+        "Awais Live PK",
+        "Live Broadcast Pakistan",
+        "+ Enter Custom Channel Name..."
+    )
+
     private val _uiState = MutableStateFlow(ConnectAccountsUiState())
     val uiState: StateFlow<ConnectAccountsUiState> = _uiState.asStateFlow()
 
@@ -58,9 +88,10 @@ class ConnectAccountsViewModel(
         viewModelScope.launch {
             facebookRepository.getPages().collect { pages ->
                 val connected = pages.firstOrNull()
+                val pageList = if (pages.isEmpty()) defaultFbPages else (pages.map { it.name } + "+ Enter Custom Page Name...").distinct()
                 _uiState.value = _uiState.value.copy(
-                    availableFacebookPages = pages.map { it.name },
-                    selectedFacebookPage = if (_uiState.value.selectedFacebookPage.isBlank()) (pages.firstOrNull()?.name ?: "") else _uiState.value.selectedFacebookPage,
+                    availableFacebookPages = pageList,
+                    selectedFacebookPage = if (_uiState.value.selectedFacebookPage.isBlank()) (pageList.firstOrNull() ?: "") else _uiState.value.selectedFacebookPage,
                     isFacebookConnected = connected != null,
                     facebookConnectedName = connected?.name ?: ""
                 )
@@ -70,9 +101,10 @@ class ConnectAccountsViewModel(
         viewModelScope.launch {
             youtubeRepository.getChannels().collect { channels ->
                 val connected = channels.firstOrNull()
+                val channelList = if (channels.isEmpty()) defaultYtChannels else (channels.map { it.title } + "+ Enter Custom Channel Name...").distinct()
                 _uiState.value = _uiState.value.copy(
-                    availableYouTubeChannels = channels.map { it.title },
-                    selectedYouTubeChannel = if (_uiState.value.selectedYouTubeChannel.isBlank()) (channels.firstOrNull()?.title ?: "") else _uiState.value.selectedYouTubeChannel,
+                    availableYouTubeChannels = channelList,
+                    selectedYouTubeChannel = if (_uiState.value.selectedYouTubeChannel.isBlank()) (channelList.firstOrNull() ?: "") else _uiState.value.selectedYouTubeChannel,
                     isYouTubeConnected = connected != null,
                     youtubeConnectedName = connected?.title ?: ""
                 )
@@ -137,11 +169,35 @@ class ConnectAccountsViewModel(
         _uiState.value = _uiState.value.copy(customGoogleClientId = id)
     }
 
+    fun updateCustomPageName(name: String) {
+        _uiState.value = _uiState.value.copy(customPageName = name)
+    }
+
+    fun updateCustomPageStreamKey(key: String) {
+        _uiState.value = _uiState.value.copy(customPageStreamKey = key)
+    }
+
+    fun updateCustomChannelName(name: String) {
+        _uiState.value = _uiState.value.copy(customChannelName = name)
+    }
+
+    fun updateCustomChannelStreamKey(key: String) {
+        _uiState.value = _uiState.value.copy(customChannelStreamKey = key)
+    }
+
+    fun toggleFacebookDevOAuth() {
+        _uiState.value = _uiState.value.copy(showFacebookDevOAuth = !_uiState.value.showFacebookDevOAuth)
+    }
+
+    fun toggleYouTubeDevOAuth() {
+        _uiState.value = _uiState.value.copy(showYouTubeDevOAuth = !_uiState.value.showYouTubeDevOAuth)
+    }
+
     fun continueWithFacebook() {
         _uiState.value = _uiState.value.copy(
             isFacebookLoggedIn = true,
-            selectedFacebookPage = _uiState.value.selectedFacebookPage.ifBlank { "My Facebook Live Page" },
-            message = "Facebook account authenticated. Select Page to link."
+            selectedFacebookPage = _uiState.value.selectedFacebookPage.ifBlank { "Official Live Stream PK" },
+            message = "Facebook account authenticated. Select or enter Page to link."
         )
     }
 
@@ -157,13 +213,23 @@ class ConnectAccountsViewModel(
 
     fun connectFacebookPage() {
         viewModelScope.launch {
-            val pageName = _uiState.value.selectedFacebookPage.ifBlank { "Live Broadcast Page" }
+            val isCustom = _uiState.value.selectedFacebookPage.startsWith("+")
+            val rawName = if (isCustom && _uiState.value.customPageName.isNotBlank()) {
+                _uiState.value.customPageName.trim()
+            } else if (!isCustom) {
+                _uiState.value.selectedFacebookPage
+            } else {
+                "Official Live Stream PK"
+            }
+            val pageName = rawName.ifBlank { "Official Live Stream PK" }
+            val pageToken = _uiState.value.customPageStreamKey.ifBlank { "fb_live_${System.currentTimeMillis()}" }
+
             facebookRepository.linkPage(
                 pageName = pageName,
                 pageId = "fb_page_${pageName.replace(" ", "_").lowercase()}",
-                pageToken = "EAAB_${System.currentTimeMillis()}"
+                pageToken = pageToken
             )
-            tokenStorage.saveFacebookToken("fb_auth_token_${System.currentTimeMillis()}")
+            tokenStorage.saveFacebookToken(pageToken)
             _uiState.value = _uiState.value.copy(
                 isFacebookConnected = true,
                 facebookConnectedName = pageName,
@@ -190,8 +256,8 @@ class ConnectAccountsViewModel(
     fun continueWithGoogle() {
         _uiState.value = _uiState.value.copy(
             isGoogleLoggedIn = true,
-            selectedYouTubeChannel = _uiState.value.selectedYouTubeChannel.ifBlank { "My YouTube Live Channel" },
-            message = "Google account authenticated. Select Channel to link."
+            selectedYouTubeChannel = _uiState.value.selectedYouTubeChannel.ifBlank { "Official YouTube Studio" },
+            message = "Google account authenticated. Select or enter Channel to link."
         )
     }
 
@@ -207,13 +273,24 @@ class ConnectAccountsViewModel(
 
     fun connectYouTubeChannel() {
         viewModelScope.launch {
-            val channelName = _uiState.value.selectedYouTubeChannel.ifBlank { "Live Stream Channel" }
+            val isCustom = _uiState.value.selectedYouTubeChannel.startsWith("+")
+            val rawName = if (isCustom && _uiState.value.customChannelName.isNotBlank()) {
+                _uiState.value.customChannelName.trim()
+            } else if (!isCustom) {
+                _uiState.value.selectedYouTubeChannel
+            } else {
+                "Official YouTube Studio"
+            }
+            val channelName = rawName.ifBlank { "Official YouTube Studio" }
+            val channelHandle = "@${channelName.replace(" ", "")}"
+
             youtubeRepository.linkChannel(
                 title = channelName,
                 channelId = "UC_${channelName.replace(" ", "_").lowercase()}",
-                customUrl = "@${channelName.replace(" ", "")}"
+                customUrl = channelHandle
             )
-            tokenStorage.saveYouTubeToken("yt_auth_token_${System.currentTimeMillis()}")
+            val token = _uiState.value.customChannelStreamKey.ifBlank { "yt_live_${System.currentTimeMillis()}" }
+            tokenStorage.saveYouTubeToken(token)
             _uiState.value = _uiState.value.copy(
                 isYouTubeConnected = true,
                 youtubeConnectedName = channelName,

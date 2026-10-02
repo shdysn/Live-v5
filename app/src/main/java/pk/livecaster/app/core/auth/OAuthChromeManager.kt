@@ -41,9 +41,19 @@ class OAuthChromeManager(
 
     /**
      * Launches the official Facebook Login dialogue in Google Chrome (or default browser)
+     * Validates that a non-placeholder Meta App ID is provided to avoid Facebook's "Invalid App ID" error.
      */
     fun launchFacebookInChrome(context: Context, customAppId: String? = null) {
-        val appId = customAppId?.ifBlank { null } ?: DEFAULT_FB_APP_ID
+        val appId = customAppId?.trim()?.ifBlank { null }
+        if (appId == null || appId == DEFAULT_FB_APP_ID || appId.length < 8) {
+            _authEvents.tryEmit(
+                OAuthEvent.Error(
+                    platform = "Facebook",
+                    message = "To use Chrome OAuth, please provide your verified Meta App ID in Developer Settings, or tap 'Continue with Facebook' to connect directly in LiveCaster."
+                )
+            )
+            return
+        }
         val redirectUri = "$REDIRECT_SCHEME://$REDIRECT_HOST/facebook"
         val scopes = "email,public_profile,pages_show_list,pages_read_engagement,pages_manage_posts,publish_video"
 
@@ -59,9 +69,19 @@ class OAuthChromeManager(
 
     /**
      * Launches the official Google/YouTube Login dialogue in Google Chrome (or default browser)
+     * Validates that a non-placeholder Client ID is provided to avoid Google's "404 Not Found" error.
      */
     fun launchGoogleInChrome(context: Context, customClientId: String? = null) {
-        val clientId = customClientId?.ifBlank { null } ?: DEFAULT_GOOGLE_CLIENT_ID
+        val clientId = customClientId?.trim()?.ifBlank { null }
+        if (clientId == null || clientId == DEFAULT_GOOGLE_CLIENT_ID || !clientId.contains(".googleusercontent.com")) {
+            _authEvents.tryEmit(
+                OAuthEvent.Error(
+                    platform = "Google",
+                    message = "To use Chrome OAuth, please provide your Google Cloud Client ID in Developer Settings, or tap 'Continue with Google' to connect directly in LiveCaster."
+                )
+            )
+            return
+        }
         val redirectUri = "$REDIRECT_SCHEME://$REDIRECT_HOST/google"
         val scopes = "https://www.googleapis.com/auth/youtube https://www.googleapis.com/auth/userinfo.profile"
 

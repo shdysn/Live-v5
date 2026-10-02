@@ -155,6 +155,14 @@ fun ConnectAccountsScreen(
                 onCancel = { viewModel.cancelFacebook() },
                 onConnectPage = { viewModel.connectFacebookPage() },
                 onDisconnect = { viewModel.disconnectFacebook() },
+                customPageName = uiState.customPageName,
+                onCustomPageNameChange = { viewModel.updateCustomPageName(it) },
+                customStreamKey = uiState.customPageStreamKey,
+                onCustomStreamKeyChange = { viewModel.updateCustomPageStreamKey(it) },
+                customAppId = uiState.customFacebookAppId,
+                onCustomAppIdChange = { viewModel.updateFacebookAppId(it) },
+                showDevOAuth = uiState.showFacebookDevOAuth,
+                onToggleDevOAuth = { viewModel.toggleFacebookDevOAuth() },
                 onLoginWithChrome = { viewModel.openFacebookInChrome(context) },
                 onOpenLiveProducer = { viewModel.openFacebookLiveProducer(context) }
             )
@@ -176,6 +184,14 @@ fun ConnectAccountsScreen(
                 onCancel = { viewModel.cancelGoogle() },
                 onConnectChannel = { viewModel.connectYouTubeChannel() },
                 onDisconnect = { viewModel.disconnectYouTube() },
+                customChannelName = uiState.customChannelName,
+                onCustomChannelNameChange = { viewModel.updateCustomChannelName(it) },
+                customStreamKey = uiState.customChannelStreamKey,
+                onCustomStreamKeyChange = { viewModel.updateCustomChannelStreamKey(it) },
+                customClientId = uiState.customGoogleClientId,
+                onCustomClientIdChange = { viewModel.updateGoogleClientId(it) },
+                showDevOAuth = uiState.showYouTubeDevOAuth,
+                onToggleDevOAuth = { viewModel.toggleYouTubeDevOAuth() },
                 onLoginWithChrome = { viewModel.openGoogleInChrome(context) },
                 onOpenLiveStudio = { viewModel.openYouTubeLiveStudio(context) }
             )
