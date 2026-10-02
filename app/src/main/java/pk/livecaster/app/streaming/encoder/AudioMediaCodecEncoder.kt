@@ -48,7 +48,7 @@ class AudioMediaCodecEncoder(
             val format = MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_AAC, sampleRate, channelCount).apply {
                 setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC)
                 setInteger(MediaFormat.KEY_BIT_RATE, bitrate)
-                setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 8192)
+                setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 16384)
             }
 
             mediaCodec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC).apply {
@@ -61,10 +61,14 @@ class AudioMediaCodecEncoder(
 
             isRecording = true
             startTimeMs = System.currentTimeMillis()
-            audioRecord?.startRecording()
+            try {
+                audioRecord?.startRecording()
+            } catch (e: Exception) {
+                Log.w(TAG, "AudioRecord start failed, falling back to clean PCM silence generator: ${e.message}")
+            }
 
             startAudioPipeline(bufferSize)
-            Log.d(TAG, "Audio encoder successfully started")
+            Log.d(TAG, "Audio encoder successfully started with guaranteed AAC stream")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start audio encoder", e)
             stop()
@@ -73,20 +77,46 @@ class AudioMediaCodecEncoder(
 
     private fun startAudioPipeline(bufferSize: Int) {
         val codec = mediaCodec ?: return
-        val record = audioRecord ?: return
 
         recordThread = Thread({
             val audioBuffer = ByteArray(bufferSize)
+            val chunkDurationMs = (bufferSize.toDouble() / (sampleRate * channelCount * 2) * 1000).toLong().coerceIn(20L, 80L)
+
             while (isRecording) {
-                val readBytes = record.read(audioBuffer, 0, audioBuffer.size)
-                if (readBytes > 0) {
-                    val inputBufferIndex = codec.dequeueInputBuffer(10000)
-                    if (inputBufferIndex >= 0) {
-                        val inputBuffer: ByteBuffer? = codec.getInputBuffer(inputBufferIndex)
-                        inputBuffer?.clear()
-                        inputBuffer?.put(audioBuffer, 0, readBytes)
-                        val ptsUs = (System.currentTimeMillis() - startTimeMs) * 1000
-                        codec.queueInputBuffer(inputBufferIndex, 0, readBytes, ptsUs, 0)
+                var readBytes = 0
+                val record = audioRecord
+                if (record != null && record.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+                    try {
+                        readBytes = record.read(audioBuffer, 0, audioBuffer.size)
+                    } catch (_: Exception) {
+                        readBytes = -1
+                    }
+                }
+
+                if (readBytes <= 0) {
+                    // Generate clean PCM silence so Facebook never starves for audio
+                    java.util.Arrays.fill(audioBuffer, 0.toByte())
+                    readBytes = audioBuffer.size
+                    try {
+                        Thread.sleep(chunkDurationMs)
+                    } catch (_: InterruptedException) {
+                        break
+                    }
+                }
+
+                if (readBytes > 0 && isRecording) {
+                    try {
+                        val inputBufferIndex = codec.dequeueInputBuffer(10000)
+                        if (inputBufferIndex >= 0) {
+                            val inputBuffer: ByteBuffer? = codec.getInputBuffer(inputBufferIndex)
+                            inputBuffer?.clear()
+                            val copyLen = minOf(inputBuffer?.remaining() ?: 0, readBytes)
+                            inputBuffer?.put(audioBuffer, 0, copyLen)
+                            val ptsUs = (System.currentTimeMillis() - startTimeMs) * 1000
+                            codec.queueInputBuffer(inputBufferIndex, 0, copyLen, ptsUs, 0)
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Audio encode queue error: ${e.message}")
                     }
                 }
             }
@@ -95,20 +125,23 @@ class AudioMediaCodecEncoder(
         encodeThread = Thread({
             val bufferInfo = MediaCodec.BufferInfo()
             while (isRecording) {
-                val outputBufferIndex = codec.dequeueOutputBuffer(bufferInfo, 10000)
-                if (outputBufferIndex >= 0) {
-                    val outputBuffer = codec.getOutputBuffer(outputBufferIndex)
-                    if (outputBuffer != null && bufferInfo.size > 0) {
-                        // Skip codec config as sequence header already sent
-                        if ((bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) == 0) {
-                            val data = ByteArray(bufferInfo.size)
-                            outputBuffer.position(bufferInfo.offset)
-                            outputBuffer.get(data)
-                            val timestampMs = bufferInfo.presentationTimeUs / 1000
-                            rtmpSink.sendAudioFrame(data, 0, data.size, timestampMs)
+                try {
+                    val outputBufferIndex = codec.dequeueOutputBuffer(bufferInfo, 10000)
+                    if (outputBufferIndex >= 0) {
+                        val outputBuffer = codec.getOutputBuffer(outputBufferIndex)
+                        if (outputBuffer != null && bufferInfo.size > 0) {
+                            if ((bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) == 0) {
+                                val data = ByteArray(bufferInfo.size)
+                                outputBuffer.position(bufferInfo.offset)
+                                outputBuffer.get(data)
+                                val timestampMs = bufferInfo.presentationTimeUs / 1000
+                                rtmpSink.sendAudioFrame(data, 0, data.size, timestampMs)
+                            }
                         }
+                        codec.releaseOutputBuffer(outputBufferIndex, false)
                     }
-                    codec.releaseOutputBuffer(outputBufferIndex, false)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Audio drain error: ${e.message}")
                 }
             }
         }, "LiveCaster-AudioEncode")

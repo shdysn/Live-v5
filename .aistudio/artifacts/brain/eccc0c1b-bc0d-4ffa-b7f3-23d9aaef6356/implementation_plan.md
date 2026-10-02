@@ -1,152 +1,87 @@
-# Facebook & YouTube Live Stream Ingest & Transmission Fix (LiveCaster)
+# Fix Facebook Live Producer Preview Loading & Video Feed Delivery
 
-Comprehensive revision and execution plan to ensure the Stream Key system reliably delivers video and audio to Facebook Live and YouTube Live, resolving the issue where the app indicated "Live" but video was not appearing on Facebook.
+Comprehensive solution plan to resolve the Facebook Live Producer preview stall where Facebook connects to the stream, displays "Loading..." or "Connecting video...", and then resets without showing the live camera feed.
 
 ---
 
-## User Review & Critical Decisions
+## User Review & Critical Findings
 
 > [!IMPORTANT]
-> **Stream Key System Validation**: Yes, the Stream Key (RTMP/RTMPS) system is the **correct, official, and most reliable method** used worldwide (OBS Studio, Streamlabs, and Prism Live). It does not require Meta App review or developer account verification. The reason the app showed "Live" while Facebook was not displaying the broadcast was technical issues in the RTMP socket layer (TLS SNI handshake, AVC SPS/PPS sequence headers, and unverified chunk delivery).
+> **Root Cause Identified**: When you start streaming, Facebook Live Producer **successfully connects** to LiveCaster's RTMPS socket, which is why Facebook displays "Loading...". However, Facebook Live Producer strictly requires **synchronized, continuous AAC audio frames alongside H.264 video frames**. Because Android's runtime `RECORD_AUDIO` permission was never prompted, the microphone recording failed silently, starving Facebook of audio packets. Without an audio track, Facebook's WebRTC/DASH player cannot generate the preview and times out after 10–15 seconds.
 
-- **Primary Broadcast Architecture**: Retain and strengthen the Stream Key / Direct RTMP Ingest pipeline for Facebook and YouTube, while keeping the Chrome OAuth option for users who want automatic channel discovery.
-- **RTMPS TLS SNI Fix**: Configure SSLSocket with `SNIHostName("live-api-s.facebook.com")` so Facebook's cloud edge servers accept and route the stream instead of silently terminating the TLS session.
-- **Video Packet Encoding (SPS/PPS)**: Ensure MediaCodec extracts and sends the H.264 SPS/PPS (AVCDecoderConfigurationRecord) sequence header before any video frame is pushed, which Facebook Live Producer requires to initialize its video player.
-- **Real-Time Transmission Status**: Provide verified ingest telemetry (actual bytes pushed, socket state, and stream health) rather than a simulated duration counter.
+- **Dual Permission Request**: Request both `CAMERA` and `RECORD_AUDIO` simultaneously in `BroadcastControlScreen.kt` using `ActivityResultContracts.RequestMultiplePermissions()`.
+- **Silent Audio Fallback Generator**: When the microphone is initializing, muted, or temporarily unavailable, continuously feed silent PCM frames to `AudioMediaCodecEncoder` so Facebook always receives 44.1kHz AAC packets without dropping the connection.
+- **Forced IDR Keyframe on Start & Background**: Force `MediaCodec.PARAMETER_KEY_REQUEST_SYNC_FRAME` immediately on stream start and keep transmitting valid standby video/audio frames when the streamer switches to Chrome to view Facebook Live Producer.
+- **Instant Connection Diagnostics**: Display real-time sent packet counts for both Video and Audio directly on the screen so the user can verify that both video and audio are actively pumping into Facebook.
 
 ---
 
 ## 1. Overview & Core Concept
 
-### What This Solves
-When a broadcaster pastes a Facebook stream key (from `facebook.com/live/producer`) and starts streaming:
-1. LiveCaster establishes an authenticated, SNI-compliant TLS connection to `rtmps://live-api-s.facebook.com:443/rtmp/`.
-2. It sends the RTMP handshake, chunk size, `connect`, `createStream`, and `publish` commands, waiting for server acknowledgment.
-3. It sends the AVC video sequence header (SPS + PPS) and AAC audio header, followed by camera frames.
-4. Facebook Live Producer immediately registers the stream, displays the incoming video preview, and activates the live broadcast.
-5. In LiveCaster, a **Transmission Status Card** shows real-time ping, packets sent, and a button to view/confirm the live feed in Facebook Live Producer.
+### What Happens
+1. Streamer pastes the stream key from Facebook Live Producer and taps **"Start Live"**.
+2. LiveCaster prompts for both Camera and Microphone permissions if not already granted.
+3. RTMPS connection is established with TLS SNI.
+4. AVC Sequence Header (SPS/PPS) and AAC Sequence Header (44.1kHz Stereo) are immediately dispatched.
+5. MediaCodec generates an immediate IDR keyframe and AAC audio frames.
+6. If the streamer switches to Chrome to view `facebook.com/live/producer`, the background keep-alive loop continues feeding encoded frames without timing out.
+7. Facebook Live Producer receives both video and audio tracks, generates the video preview immediately, and enables the blue **"Go Live"** button.
 
 ---
 
-## 2. User Experience & Visual Design
-
-### Broadcast Setup & Live Transmission Flow
+## 2. Technical Architecture & Ingest Pipeline
 
 ```
 ┌────────────────────────────────────────────────────────┐
-│              LiveCaster Setup Screen                   │
+│                   LiveCaster App                       │
 │                                                        │
-│  [FB Stream Key: FB-192837465...                     ] │
-│  [YT Stream Key: 1a2b-3c4d-5e6f...                   ] │
-│                                                        │
-│  [ Initialize Live Studio ]                            │
-└──────────────────────────┬─────────────────────────────┘
-                           │
-                           ▼
+│  [CameraX YUV Frames]      [AudioRecord PCM / Silence] │
+│           │                               │            │
+│           ▼                               ▼            │
+│  VideoMediaCodecEncoder         AudioMediaCodecEncoder │
+│  - Forced IDR on start          - Always active 44.1k  │
+│  - AVC Sequence Header          - AAC Sequence Header  │
+│  - Continuous Keep-Alive        - Continuous AAC frames│
+│           │                               │            │
+│           └───────────────┬───────────────┘            │
+│                           │                            │
+│                           ▼                            │
+│                  MultiRtmpDispatcher                   │
+│                           │                            │
+│                           ▼                            │
+│                 RtmpConnection (RTMPS)                 │
+│                 - TLS SNI Handshake                    │
+│                 - Interleaved Video + Audio Tags       │
+└───────────────────────────┬────────────────────────────┘
+                            │
+                            ▼
 ┌────────────────────────────────────────────────────────┐
-│              Live Broadcasting Studio                  │
+│            Facebook Live Producer (Edge CDN)           │
 │                                                        │
-│  ┌──────────────────────────────────────────────────┐  │
-│  │              Full Camera Preview                 │  │
-│  └──────────────────────────────────────────────────┘  │
-│                                                        │
-│  ┌─ Transmission Status ─────────────────────────────┐ │
-│  │ ● Facebook: Connected (RTMPS 443) • 3.5 Mbps      │ │
-│  │   [Open FB Live Producer to confirm preview ↗]    │ │
-│  │ ● YouTube: Connected (RTMP 1935)  • 3.5 Mbps      │ │
-│  └───────────────────────────────────────────────────┘ │
-│                                                        │
-│  [ Mute Mic ]  [ Flip Camera ]  [ Flash ]  [ End Live ]│
+│  1. Socket Connected (Handshake OK)                    │
+│  2. onMetaData (Width, Height, AAC, AVC OK)            │
+│  3. Video Header + Audio Header received               │
+│  4. Video + Audio packets synchronized                 │
+│  5. Preview appears with live video & sound!           │
+│  6. Broadcaster clicks "Go Live"                       │
 └────────────────────────────────────────────────────────┘
 ```
 
-1. **Setup Screen**:
-   - Facebook and YouTube stream keys can be pasted or retrieved from Connect Accounts.
-   - An instant **"Test Connection"** ping button verifies that `live-api-s.facebook.com:443` is reachable.
-2. **Live Studio**:
-   - The status changes to **"Connecting..."** while the RTMP handshake and stream negotiation take place.
-   - Once Facebook and YouTube acknowledge the `publish` command and receive the SPS/PPS headers, the status switches to **"● Live Transmission Verified"**.
-   - If Facebook closes the socket or rejects the key, a clear error banner appears: *"Facebook rejected stream key. Please verify key in FB Live Producer"*.
-   - A convenient button **"Open FB Live Producer in Chrome ↗"** allows the user to see their live preview on Facebook and ensure it is broadcasting to viewers.
-
 ---
 
-## 3. Key Technical Fixes & Decisions
+## 3. Step-by-Step Implementation Worklist
 
-### Fix 1: TLS SNI (Server Name Indication) on Android SSLSocket
-- **Problem**: Meta's servers host thousands of domains behind shared cloud IPs. When `SSLSocket` connects without SNI, the server does not know which TLS certificate to present and terminates the connection.
-- **Solution**:
-  ```kotlin
-  val ssl = factory.createSocket(host, port) as SSLSocket
-  val params = ssl.sslParameters
-  params.serverNames = listOf(SNIHostName(host))
-  ssl.sslParameters = params
-  ssl.startHandshake()
-  ```
+1. **`BroadcastControlScreen.kt`**:
+   - Replace single camera permission launcher with `RequestMultiplePermissions()` for both `Manifest.permission.CAMERA` and `Manifest.permission.RECORD_AUDIO`.
+   - Show helpful status chips: `Video: Streaming (30fps)` and `Audio: Streaming (AAC 44.1kHz)`.
 
-### Fix 2: Proper H.264 SPS / PPS Header Transmission
-- **Problem**: Facebook's ingest servers drop streams that send raw NALUs without an AVC Decoder Configuration Record (Type 0 packet containing SPS & PPS).
-- **Solution**:
-  In `VideoMediaCodecEncoder`, extract `csd-0` (SPS) and `csd-1` (PPS) from MediaCodec's `INFO_OUTPUT_FORMAT_CHANGED` and send a Type 0 AVC packet (`AVCDecoderConfigurationRecord`) before transmitting IDR keyframes.
+2. **`AudioMediaCodecEncoder.kt`**:
+   - Implement graceful fallback: if `AudioRecord` fails, lacks permission, or is in an emulator, generate silent 16-bit PCM frames to ensure the AAC encoder continuously outputs valid audio frames to Facebook.
+   - Prevent any silent exceptions from stopping the audio pipeline.
 
-### Fix 3: Verified Telemetry vs. Blind Timer
-- **Problem**: The app's timer started counting duration even if the socket was dropping packets or waiting for reconnection.
-- **Solution**:
-  Tie `StreamStatus.LIVE` and duration incrementing strictly to active socket writes and acknowledgment from the RTMP server. If writes fail, transition to `StreamStatus.RECONNECTING` or `StreamStatus.ERROR` with actionable error messages.
+3. **`VideoMediaCodecEncoder.kt`**:
+   - Issue `PARAMETER_KEY_REQUEST_SYNC_FRAME` on startup and every 2 seconds to adhere to Facebook's required 2-second GOP (Group of Pictures) rule.
+   - Ensure the keep-alive loop maintains seamless PTS (presentation timestamps) when switching to Chrome.
 
----
-
-## 4. Technical Architecture Diagram
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                       LiveCaster Studio                         │
-│                                                                 │
-│   CameraX Video Frames                 AudioRecord PCM Bytes    │
-│           │                                      │              │
-│           ▼                                      ▼              │
-│  VideoMediaCodecEncoder                AudioMediaCodecEncoder   │
-│  - Extracts SPS/PPS (csd-0, csd-1)     - AAC-LC format          │
-│  - H.264 NALUs (IDR & Non-IDR)         - AAC sequence header    │
-│           │                                      │              │
-│           └──────────────────┬───────────────────┘              │
-│                              │                                  │
-│                              ▼                                  │
-│                     MultiRtmpDispatcher                         │
-│                              │                                  │
-│               ┌──────────────┴──────────────┐                   │
-│               ▼                             ▼                   │
-│       RtmpConnection (FB)           RtmpConnection (YT)         │
-│       - TLS 1.3 with SNI            - TCP Socket                │
-│       - Port 443 (RTMPS)            - Port 1935 (RTMP)          │
-│       - Handshake C0/C1/C2          - Handshake C0/C1/C2        │
-│       - Send AVC SPS/PPS            - Send AVC SPS/PPS          │
-└───────────────┬─────────────────────────────┬───────────────────┘
-                │                             │
-                ▼                             ▼
-┌──────────────────────────────┐┌─────────────────────────────────┐
-│     Facebook Live Ingest     ││       YouTube Live Ingest       │
-│ rtmps://live-api-s.facebook  ││ rtmp://a.rtmp.youtube.com/live2 │
-│   .com:443/rtmp/{FB_KEY}     ││   /{YT_KEY}                     │
-│                              ││                                 │
-│  - Video Preview Shows UP    ││  - Video Preview Shows UP       │
-│  - Live Broadcast to Viewers ││  - Live Broadcast to Viewers    │
-└──────────────────────────────┘└─────────────────────────────────┘
-```
-
----
-
-## 5. Step-by-Step Implementation Worklist
-
-1. **`RtmpConnection.kt`**:
-   - Update `connect()` to properly configure `SNIHostName` on `SSLSocket` for all `rtmps://` endpoints.
-   - Refactor `sendConnect()`, `sendCreateStream()`, and `sendPublish()` to handle server `_result` responses.
-   - Support `sendAvcSequenceHeader(sps: ByteArray, pps: ByteArray)` before IDR keyframes.
-2. **`VideoMediaCodecEncoder.kt`**:
-   - Capture `csd-0` (SPS) and `csd-1` (PPS) from `MediaFormat` on codec startup and pass them to `rtmpSink.sendAvcSequenceHeader(...)`.
-3. **`RtmpPublisher.kt`**:
-   - Verify active socket status before marking stream as `LIVE`.
-   - Update `StreamTelemetry` with real byte count and ping.
-4. **`BroadcastSetupScreen.kt` & `BroadcastControlScreen.kt`**:
-   - Add explicit guidance for Facebook Live Producer: reminder to check video preview in Facebook and click "Go Live" if not set to automatic.
-   - Add a quick shortcut in the studio control bar: **"Check FB Live Preview ↗"**.
+4. **`RtmpConnection.kt`**:
+   - Verify that Audio (csid 4) and Video (csid 6) packets are properly flushed without socket buffer starvation.

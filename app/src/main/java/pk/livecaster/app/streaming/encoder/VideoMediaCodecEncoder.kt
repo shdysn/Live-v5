@@ -51,11 +51,21 @@ class VideoMediaCodecEncoder(
 
             startDrainThread()
             startKeepAliveThread()
+            requestSyncFrame()
             Log.d(TAG, "Video H.264 MediaCodec started successfully: ${width}x${height} @ ${bitrateKbps}kbps")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start H.264 video encoder", e)
             stop()
         }
+    }
+
+    fun requestSyncFrame() {
+        try {
+            val params = android.os.Bundle().apply {
+                putInt(MediaCodec.PARAMETER_KEY_REQUEST_SYNC_FRAME, 0)
+            }
+            mediaCodec?.setParameters(params)
+        } catch (_: Exception) {}
     }
 
     fun encodeYuv(nv21OrYuv420: ByteArray) {
@@ -85,12 +95,20 @@ class VideoMediaCodecEncoder(
 
     private fun startKeepAliveThread() {
         keepAliveThread = Thread({
+            var lastSyncRequestMs = System.currentTimeMillis()
             while (isEncoding) {
                 try {
-                    Thread.sleep(150)
+                    Thread.sleep(100)
                     val now = System.currentTimeMillis()
-                    // If app is in background and no camera frames have arrived for > 250ms
-                    if (isEncoding && now - lastFrameTimeMs > 250) {
+
+                    // Facebook Live strictly requires an IDR keyframe at least every 2 seconds
+                    if (now - lastSyncRequestMs >= 1900) {
+                        requestSyncFrame()
+                        lastSyncRequestMs = now
+                    }
+
+                    // If app is in background (e.g. user switched to Chrome) and camera paused
+                    if (isEncoding && now - lastFrameTimeMs > 200) {
                         val frame = lastFrameBytes ?: createStandbyFrame()
                         encodeInternal(frame)
                         lastFrameTimeMs = now
@@ -109,7 +127,10 @@ class VideoMediaCodecEncoder(
         val ySize = width * height
         val uvSize = width * height / 2
         val standby = ByteArray(ySize + uvSize)
-        java.util.Arrays.fill(standby, 0, ySize, 16.toByte())
+        // High contrast test luma for encoder
+        for (i in 0 until ySize) {
+            standby[i] = if ((i / width / 30) % 2 == 0) 180.toByte() else 40.toByte()
+        }
         java.util.Arrays.fill(standby, ySize, standby.size, 128.toByte())
         return standby
     }

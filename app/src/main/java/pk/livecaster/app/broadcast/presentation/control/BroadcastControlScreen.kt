@@ -104,12 +104,20 @@ fun BroadcastControlScreen(
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
         )
     }
+    var hasAudioPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        )
+    }
 
-    val permissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        hasCameraPermission = granted
-        if (granted) {
+    val permissionsLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { perms ->
+        val cameraGranted = perms[Manifest.permission.CAMERA] ?: hasCameraPermission
+        val audioGranted = perms[Manifest.permission.RECORD_AUDIO] ?: hasAudioPermission
+        hasCameraPermission = cameraGranted
+        hasAudioPermission = audioGranted
+        if (cameraGranted) {
             previewViewRef?.let { cameraManager.bindCamera(lifecycleOwner, it) }
         }
     }
@@ -118,8 +126,10 @@ fun BroadcastControlScreen(
         cameraManager.onYuvFrameAvailable = { yuvBytes ->
             viewModel.feedVideoFrame(yuvBytes)
         }
-        if (!hasCameraPermission) {
-            permissionLauncher.launch(Manifest.permission.CAMERA)
+        if (!hasCameraPermission || !hasAudioPermission) {
+            permissionsLauncher.launch(
+                arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
+            )
         }
     }
 
@@ -183,10 +193,14 @@ fun BroadcastControlScreen(
                     )
                     Spacer(modifier = Modifier.height(18.dp))
                     Button(
-                        onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) },
+                        onClick = {
+                            permissionsLauncher.launch(
+                                arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
+                            )
+                        },
                         colors = ButtonDefaults.buttonColors(containerColor = LiveRed)
                     ) {
-                        Text("Grant Camera Permission", color = TextPrimary)
+                        Text("Grant Permissions", color = TextPrimary)
                     }
                 }
             }
