@@ -1,0 +1,87 @@
+name: LiveCaster CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build-and-test:
+    name: Build & Test Android App
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+
+      - name: Prepare Keystore and Environment
+        run: |
+          # 1. Try decoding debug.keystore from base64 if present
+          if [ -f debug.keystore.base64 ] && [ ! -f debug.keystore ]; then
+            (base64 -d debug.keystore.base64 > debug.keystore 2>/dev/null) || \
+            (base64 --decode debug.keystore.base64 > debug.keystore 2>/dev/null) || true
+          fi
+
+          # 2. If debug.keystore is still missing, automatically generate a valid debug keystore
+          if [ ! -f debug.keystore ]; then
+            echo "Generating debug.keystore with keytool..."
+            keytool -genkey -v -keystore debug.keystore \
+              -storepass android -keypass android -alias androiddebugkey \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+
+          # 3. Ensure .env exists for Secrets Gradle Plugin
+          if [ ! -f .env ]; then
+            if [ -f .env.example ]; then
+              cp .env.example .env
+            else
+              touch .env
+            fi
+          fi
+
+      - name: Prefetch Robolectric Android-All JAR
+        run: |
+          ROBO_DIR="$HOME/.m2/repository/org/robolectric/android-all/14-robolectric-10818077"
+          mkdir -p "$ROBO_DIR"
+          if [ ! -f "$ROBO_DIR/android-all-14-robolectric-10818077.jar" ]; then
+            echo "Downloading Robolectric jar to local maven repository..."
+            curl -fSL -o "$ROBO_DIR/android-all-14-robolectric-10818077.jar" \
+              https://repo1.maven.org/maven2/org/robolectric/android-all/14-robolectric-10818077/android-all-14-robolectric-10818077.jar || true
+            curl -fSL -o "$ROBO_DIR/android-all-14-robolectric-10818077.pom" \
+              https://repo1.maven.org/maven2/org/robolectric/android-all/14-robolectric-10818077/android-all-14-robolectric-10818077.pom || true
+          fi
+
+      - name: Grant Execute Permission to gradlew
+        run: chmod +x gradlew
+
+      - name: Run Unit Tests
+        run: ./gradlew :app:testDebugUnitTest --no-daemon --stacktrace
+
+      - name: Upload Test Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-reports
+          path: app/build/reports/tests/testDebugUnitTest/
+
+      - name: Build Debug APK
+        run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
+
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: livecaster-debug-apk
+          path: app/build/outputs/apk/debug/*.apk

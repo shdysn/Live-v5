@@ -1,0 +1,6 @@
+{
+  "name": "LiveCaster",
+  "description": "Multi-platform Live Streaming Studio & Broadcast Manager for Android with Facebook, YouTube, RTMP, camera encoder, telemetry, and Urdu support",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

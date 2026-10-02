@@ -1,0 +1,215 @@
+LiveCaster-Detailed-Structure/
+│
+├── app/
+│   └── src/main/
+│       ├── java/pk/livecaster/app/
+│       │   ├── core/
+│       │   │   ├── common/
+│       │   │   │   └── Resource.kt
+│       │   │   ├── constants/
+│       │   │   │   └── AppConstants.kt
+│       │   │   ├── di/
+│       │   │   │   └── AppContainer.kt
+│       │   │   ├── network/
+│       │   │   │   ├── dto/
+│       │   │   │   │   └── ApiResponse.kt
+│       │   │   │   ├── interceptor/
+│       │   │   │   │   └── AuthInterceptor.kt
+│       │   │   │   └── NetworkClient.kt
+│       │   │   ├── security/
+│       │   │   │   └── SecureTokenStorage.kt
+│       │   │   ├── storage/
+│       │   │   │   ├── dao/
+│       │   │   │   │   ├── BroadcastDao.kt
+│       │   │   │   │   ├── DestinationDao.kt
+│       │   │   │   │   └── StreamLogDao.kt
+│       │   │   │   ├── entity/
+│       │   │   │   │   ├── BroadcastEntity.kt
+│       │   │   │   │   ├── DestinationEntity.kt
+│       │   │   │   │   └── StreamLogEntity.kt
+│       │   │   │   └── AppDatabase.kt
+│       │   │   └── util/
+│       │   │       ├── Formatters.kt
+│       │   │       └── PermissionHelper.kt
+│       │   │
+│       │   ├── navigation/
+│       │   │   ├── Screen.kt
+│       │   │   └── LiveCasterNavGraph.kt
+│       │   │
+│       │   ├── auth/
+│       │   │   ├── data/
+│       │   │   │   ├── datasource/
+│       │   │   │   │   └── AuthDataSource.kt
+│       │   │   │   └── repository/
+│       │   │   │       └── AuthRepositoryImpl.kt
+│       │   │   ├── domain/
+│       │   │   │   ├── model/
+│       │   │   │   │   └── User.kt
+│       │   │   │   ├── repository/
+│       │   │   │   │   └── AuthRepository.kt
+│       │   │   │   └── usecase/
+│       │   │   │       └── AuthUseCases.kt
+│       │   │   └── presentation/
+│       │   │       └── login/
+│       │   │           ├── LoginViewModel.kt
+│       │   │           └── LoginScreen.kt
+│       │   │
+│       │   ├── dashboard/
+│       │   │   └── presentation/
+│       │   │       ├── DashboardViewModel.kt
+│       │   │       └── DashboardScreen.kt
+│       │   │
+│       │   ├── facebook/
+│       │   │   ├── data/
+│       │   │   │   ├── api/
+│       │   │   │   │   └── FacebookApiService.kt
+│       │   │   │   ├── dto/
+│       │   │   │   │   └── FacebookDtos.kt
+│       │   │   │   └── repository/
+│       │   │   │       └── FacebookRepositoryImpl.kt
+│       │   │   ├── domain/
+│       │   │   │   ├── model/
+│       │   │   │   │   └── FacebookModels.kt
+│       │   │   │   ├── repository/
+│       │   │   │   │   └── FacebookRepository.kt
+│       │   │   │   └── usecase/
+│       │   │   │       └── FacebookUseCases.kt
+│       │   │   └── presentation/
+│       │   │       └── pages/
+│       │   │           ├── FacebookPagesViewModel.kt
+│       │   │           └── FacebookPagesScreen.kt
+│       │   │
+│       │   ├── youtube/
+│       │   │   ├── data/
+│       │   │   │   ├── api/
+│       │   │   │   │   └── YouTubeApiService.kt
+│       │   │   │   ├── dto/
+│       │   │   │   │   └── YouTubeDtos.kt
+│       │   │   │   └── repository/
+│       │   │   │       └── YouTubeRepositoryImpl.kt
+│       │   │   ├── domain/
+│       │   │   │   ├── model/
+│       │   │   │   │   └── YouTubeModels.kt
+│       │   │   │   ├── repository/
+│       │   │   │   │   └── YouTubeRepository.kt
+│       │   │   │   └── usecase/
+│       │   │   │       └── YouTubeUseCases.kt
+│       │   │   └── presentation/
+│       │   │       └── channels/
+│       │   │           ├── YouTubeChannelsViewModel.kt
+│       │   │           └── YouTubeChannelsScreen.kt
+│       │   │
+│       │   ├── broadcast/
+│       │   │   ├── data/repository/
+│       │   │   │   └── BroadcastRepositoryImpl.kt
+│       │   │   ├── domain/
+│       │   │   │   ├── model/
+│       │   │   │   │   └── BroadcastModels.kt
+│       │   │   │   ├── repository/
+│       │   │   │   │   └── BroadcastRepository.kt
+│       │   │   │   └── usecase/
+│       │   │   │       └── BroadcastUseCases.kt
+│       │   │   └── presentation/
+│       │   │       ├── setup/
+│       │   │       │   ├── BroadcastSetupViewModel.kt
+│       │   │       │   └── BroadcastSetupScreen.kt
+│       │   │       └── control/
+│       │   │           ├── BroadcastControlViewModel.kt
+│       │   │           └── BroadcastControlScreen.kt
+│       │   │
+│       │   ├── streaming/
+│       │   │   ├── capture/
+│       │   │   │   └── CameraCaptureManager.kt
+│       │   │   ├── encoder/
+│       │   │   │   └── EncoderConfigs.kt
+│       │   │   ├── muxer/
+│       │   │   │   └── FlvMuxer.kt
+│       │   │   ├── publisher/
+│       │   │   │   └── RtmpPublisher.kt
+│       │   │   ├── service/
+│       │   │   │   └── LiveStreamingService.kt
+│       │   │   ├── state/
+│       │   │   │   └── StreamState.kt
+│       │   │   └── notification/
+│       │   │       └── StreamNotificationManager.kt
+│       │   │
+│       │   ├── settings/
+│       │   │   ├── data/
+│       │   │   │   └── SettingsRepositoryImpl.kt
+│       │   │   └── presentation/
+│       │   │       ├── SettingsViewModel.kt
+│       │   │       └── SettingsScreen.kt
+│       │   │
+│       │   └── LiveCasterApp.kt
+│       │
+│       └── res/
+│           ├── drawable/
+│           │   ├── ic_launcher_background.xml
+│           │   ├── ic_launcher_foreground.xml
+│           │   └── livecaster_icon_*.jpg
+│           ├── mipmap-*/
+│           ├── values/
+│           │   ├── colors.xml
+│           │   ├── strings.xml
+│           │   └── themes.xml
+│           ├── values-ur/
+│           │   └── strings.xml
+│           └── xml/
+│
+├── backend/
+│   ├── src/
+│   │   ├── config/
+│   │   │   └── index.js
+│   │   ├── common/
+│   │   │   ├── errors/
+│   │   │   │   └── AppError.js
+│   │   │   ├── middleware/
+│   │   │   │   └── auth.js
+│   │   │   ├── security/
+│   │   │   │   └── tokens.js
+│   │   │   └── validation/
+│   │   │       └── schema.js
+│   │   ├── modules/
+│   │   │   ├── auth/
+│   │   │   │   └── authController.js
+│   │   │   ├── facebook/
+│   │   │   │   └── facebookController.js
+│   │   │   ├── youtube/
+│   │   │   │   └── youtubeController.js
+│   │   │   ├── broadcasts/
+│   │   │   │   └── broadcastController.js
+│   │   │   ├── users/
+│   │   │   │   └── userController.js
+│   │   │   └── webhooks/
+│   │   │       └── webhookHandler.js
+│   │   └── database/
+│   │       ├── migrations/
+│   │       │   └── 001_initial_schema.sql
+│   │       ├── models/
+│   │       │   ├── User.js
+│   │       │   └── Broadcast.js
+│   │       └── repositories/
+│   │           └── broadcastRepository.js
+│   ├── tests/
+│   │   ├── unit/
+│   │   │   └── auth.test.js
+│   │   └── integration/
+│   │       └── broadcast.test.js
+│   ├── package.json
+│   └── server.js
+│
+├── docs/
+│   ├── api/
+│   │   └── endpoints.md
+│   ├── architecture/
+│   │   └── system_design.md
+│   ├── setup/
+│   │   └── getting_started.md
+│   └── security/
+│       └── security_guide.md
+│
+├── .github/workflows/
+│   └── android_ci.yml
+├── FOLDER_STRUCTURE.txt
+├── README.md
+└── .gitignore
