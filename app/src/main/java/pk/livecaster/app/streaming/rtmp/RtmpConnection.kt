@@ -8,6 +8,7 @@ import java.io.OutputStream
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.security.SecureRandom
+import javax.net.ssl.SNIHostName
 import javax.net.ssl.SSLSocket
 import javax.net.ssl.SSLSocketFactory
 
@@ -19,6 +20,8 @@ class RtmpConnection : RtmpStreamSink {
     private val chunkSize = 4096
     private var isConnected = false
 
+    var onStatusListener: ((statusMessage: String, isError: Boolean) -> Unit)? = null
+
     fun connect(rtmpUrl: String, streamKey: String, width: Int, height: Int, fps: Int, videoBitrateKbps: Int): Boolean {
         try {
             val isRtmps = rtmpUrl.startsWith("rtmps://", ignoreCase = true)
@@ -29,14 +32,24 @@ class RtmpConnection : RtmpStreamSink {
             Log.d(TAG, "Connecting to RTMP: host=$host, port=$port, app=$app, isRtmps=$isRtmps")
 
             val s: Socket = if (isRtmps) {
+                val raw = Socket()
+                raw.tcpNoDelay = true
+                raw.connect(InetSocketAddress(host, port), 10000)
                 val factory = SSLSocketFactory.getDefault() as SSLSocketFactory
-                val ssl = factory.createSocket() as SSLSocket
-                ssl.connect(InetSocketAddress(host, port), 8000)
+                val ssl = factory.createSocket(raw, host, port, true) as SSLSocket
+                try {
+                    val params = ssl.sslParameters
+                    params.serverNames = listOf(SNIHostName(host))
+                    ssl.sslParameters = params
+                } catch (e: Exception) {
+                    Log.w(TAG, "Could not set SNI explicitly: ${e.message}")
+                }
                 ssl.startHandshake()
                 ssl
             } else {
                 val raw = Socket()
-                raw.connect(InetSocketAddress(host, port), 8000)
+                raw.tcpNoDelay = true
+                raw.connect(InetSocketAddress(host, port), 10000)
                 raw
             }
 
@@ -337,11 +350,24 @@ class RtmpConnection : RtmpStreamSink {
                     val read = inStream.read(buffer)
                     if (read < 0) {
                         Log.d(TAG, "Server closed input stream")
+                        isConnected = false
+                        onStatusListener?.invoke("Server disconnected socket. Check stream key.", true)
                         break
+                    }
+                    if (read > 0) {
+                        val str = String(buffer, 0, minOf(read, 1024), Charsets.ISO_8859_1)
+                        if (str.contains("NetStream.Publish.Start")) {
+                            Log.d(TAG, "RTMP server confirmed: NetStream.Publish.Start")
+                            onStatusListener?.invoke("Live transmission accepted by server", false)
+                        } else if (str.contains("NetStream.Publish.BadName") || str.contains("Connect.Rejected")) {
+                            Log.e(TAG, "RTMP server rejected stream: $str")
+                            onStatusListener?.invoke("Server rejected stream key. Please check key in Live Producer.", true)
+                        }
                     }
                 } catch (e: Exception) {
                     if (isConnected) {
                         Log.w(TAG, "Reader thread exception: ${e.message}")
+                        onStatusListener?.invoke("Socket read error: ${e.message}", true)
                     }
                     break
                 }
@@ -349,6 +375,8 @@ class RtmpConnection : RtmpStreamSink {
         }, "LiveCaster-RtmpReader")
         readerThread?.start()
     }
+
+    fun isConnected(): Boolean = isConnected
 
     fun close() {
         isConnected = false

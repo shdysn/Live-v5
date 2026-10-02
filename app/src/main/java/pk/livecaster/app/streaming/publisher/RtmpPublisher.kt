@@ -89,6 +89,21 @@ class RtmpPublisher(
                 for (endpoint in validEndpoints) {
                     try {
                         val conn = RtmpConnection()
+                        conn.onStatusListener = { msg, isError ->
+                            if (isError) {
+                                android.util.Log.e("RtmpPublisher", "[${endpoint.name}] $msg")
+                                _telemetry.value = _telemetry.value.copy(
+                                    errorMessage = "${endpoint.name}: $msg",
+                                    health = StreamHealth.POOR
+                                )
+                            } else {
+                                android.util.Log.d("RtmpPublisher", "[${endpoint.name}] $msg")
+                                _telemetry.value = _telemetry.value.copy(
+                                    errorMessage = null,
+                                    health = StreamHealth.EXCELLENT
+                                )
+                            }
+                        }
                         conn.connect(
                             rtmpUrl = endpoint.rtmpUrl,
                             streamKey = endpoint.streamKey,
@@ -135,13 +150,25 @@ class RtmpPublisher(
                     status = StreamStatus.LIVE,
                     currentFps = targetFps,
                     currentBitrateKbps = targetBitrateKbps,
-                    health = StreamHealth.EXCELLENT
+                    health = StreamHealth.EXCELLENT,
+                    errorMessage = null
                 )
 
                 var secondsElapsed = 0L
                 while (isActive && _telemetry.value.status == StreamStatus.LIVE) {
                     delay(1000)
                     secondsElapsed++
+
+                    val hasAlive = activeConnections.any { it.isConnected() }
+                    if (!hasAlive) {
+                        _telemetry.value = _telemetry.value.copy(
+                            status = StreamStatus.ERROR,
+                            errorMessage = "Streaming server disconnected. Check your stream key in Facebook Live Producer.",
+                            health = StreamHealth.CRITICAL
+                        )
+                        break
+                    }
+
                     _telemetry.value = _telemetry.value.copy(
                         durationSeconds = secondsElapsed,
                         currentFps = targetFps,

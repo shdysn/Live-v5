@@ -1,10 +1,13 @@
 package pk.livecaster.app.broadcast.presentation.control
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.view.PreviewView
+import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -331,6 +334,63 @@ fun BroadcastControlScreen(
                         },
                         modifier = Modifier.weight(1f)
                     )
+                }
+
+                // Ingest Transmission Verification & FB Live Producer link
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(StudioGreen.copy(alpha = 0.2f))
+                            .border(1.dp, StudioGreen.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = "● Ingest Active",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                color = StudioGreen,
+                                fontWeight = FontWeight.Bold
+                            )
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(StudioCard.copy(alpha = 0.85f))
+                            .border(1.dp, StudioBorder, RoundedCornerShape(8.dp))
+                            .clickable {
+                                try {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.facebook.com/live/producer"))
+                                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    context.startActivity(intent)
+                                } catch (_: Exception) {}
+                            }
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.OpenInBrowser,
+                                contentDescription = null,
+                                tint = StudioCyan,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Check FB Live Preview ↗",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    color = StudioCyan,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            )
+                        }
+                    }
                 }
             }
         }
